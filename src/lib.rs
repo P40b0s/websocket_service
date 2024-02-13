@@ -7,7 +7,25 @@ pub use client::{start_client, ClientSideMessage};
 mod test
 {
     use std::time::Duration; 
-    use crate::{client::{start_client, ClientSideMessage}, server::{ServerSideMessage, Server}};
+    use serde::{Deserialize, Serialize};
+
+    use crate::{client::{start_client, ClientSideMessage}, server::{PayloadType, Server, ServerSideMessage}};
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct TestStruct
+    {
+        pub success: bool,
+        pub age: u32,
+        pub legacy: Option<String>
+    }
+    impl PayloadType for TestStruct
+    {
+        fn get_type() -> String 
+        {
+            "TestStruct".to_owned()
+        }
+    }
 
     #[tokio::test]
     pub async fn test_connection()
@@ -28,9 +46,18 @@ mod test
         loop 
         {
             std::thread::sleep(Duration::from_secs(5));
+            let test = TestStruct
+            {
+                success: true,
+                age: 18,
+                legacy: Some("Тестирование передачи структуры через ws".to_owned())
+            };
             let server_msg = ServerSideMessage::from_str("тестовая строка от сервера");
+            let server_struct_message = ServerSideMessage::from_struct(&test);
             let client_msg = ClientSideMessage::from_str("тестовая строка от клиента");
+            
             let _ = server_msg.send_to_all().await;
+            let _ = server_struct_message.send_to_all().await;
             let _ = client_msg.send().await;
 
            
