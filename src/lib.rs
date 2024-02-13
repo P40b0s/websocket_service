@@ -1,53 +1,72 @@
-mod ws_service;
-mod ws_message;
-mod ws_client_service;
-mod ws_error;
+mod server;
+mod client;
 use std::{error::Error, net::SocketAddr};
 
 use logger::debug;
-pub use ws_client_service::{WsClientService, ClientRequestProcessing};
-pub use ws_message::{WsServerMessage, WsClientMessage, CommandDecoder, WsErrorMessage, MessageSender};
-pub use ws_service::WsService;
-pub use ws_error::WSError;
+use once_cell::sync::{Lazy, OnceCell};
+use tokio::runtime::Runtime;
+pub use server::{ServerSideMessage, Server};
 
 
 
-///Стртует обработчик соединений websocket стартовать необходимо в рантайме tokio
-/// типа из tokio::main
-pub fn start_ws_service<F>(host: &str, process_client_messages : F) 
-where
-    F: Sync + Send + Clone + 'static + FnMut(&SocketAddr, &url::Url) -> Result<(), Box<dyn Error>>
-{
-    let addr = host.to_string();
-    tokio::spawn(async move
-    {
-        debug!("Стартую websocket...");
-        // Create the event loop and TCP listener we'll accept connections on.
-        let try_socket = tokio::net::TcpListener::bind(&addr).await;
-        let listener = try_socket.expect("Ошибка привязки");
-        debug!("Websocet доступен на : {}", addr);
-        while let Ok((stream, _)) = listener.accept().await 
-        {
-            tokio::spawn(WsService::accept_connection(stream, process_client_messages.clone()));
-        }
-    });
-}
+// static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
+
+// ///Стртует обработчик соединений websocket стартовать необходимо в рантайме tokio
+// /// типа из tokio::main
+// pub fn start_ws_service(host: &str)
+// {
+//     let addr = host.to_string(); 
+//     ASYNC_RUNTIME.spawn(async move
+//     {
+//         debug!("Стартую websocket...");
+//         // Create the event loop and TCP listener we'll accept connections on.
+//         let try_socket = tokio::net::TcpListener::bind(&addr).await;
+//         let listener = try_socket.expect("Ошибка привязки");
+//         debug!("Websocet доступен на : {}", &addr);
+//         while let Ok((stream, _)) = listener.accept().await 
+//         {
+//             debug!("НОВОЕ СОЕДИНЕНИЕ!");
+//             WsService::accept_connection(stream).await;
+//         }
+//     });
+// }
 
 #[cfg(test)]
 mod test
 {
-    use crate::{start_ws_service, ws_error::WSError};
+    use std::time::Duration;
 
-    #[test]
-    pub fn test_connection()
+    use logger::debug;
+    use tokio::runtime::Runtime;
+
+    use crate::{client::{start_client, ClientSideMessage}, server::{ServerSideMessage, Server}};
+
+    #[tokio::test]
+    pub async fn test_connection()
     {
-        start_ws_service("127.0.0.1:3010", |socket, cmd|
+        logger::StructLogger::initialize_logger();
+        Server::start_server("127.0.0.1:3010");
+        std::thread::sleep(Duration::from_secs(5));
+        start_client("ws://127.0.0.1:3010/", |message|
         {
-            let path = cmd.path();
-            //в целом получается команда типа client:file?path=werwerwer&logs=false
-            //что это команда от клиента тут мы уже знаем, дальше беерем path 
-            //это часть -> file если подходит дальше обрабатываем запрос для сервиса обработки файлов, дальнейший запрос указан после file
-            return Err(Box::new(WSError::ErrorParsingClientCommand("ОШИБКО!".to_owned())));
+            logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
         });
+        ServerSideMessage::on_receive_msg(|s, r| 
+        {
+            logger::info!("Получено сообщение сервером (fn on_receive_msg) {} {:?}", s, r.payload)
+        });
+            
+        
+        loop 
+        {
+            std::thread::sleep(Duration::from_secs(5));
+            let server_msg = ServerSideMessage::from_str("тестовая строка от сервера");
+            let client_msg = ClientSideMessage::from_str("тестовая строка от клиента");
+            let _ = server_msg.send_to_all().await;
+            let _ = client_msg.send().await;
+
+           
+           
+        }
     }
 }
