@@ -1,14 +1,13 @@
-use logger::{backtrace, debug, error, info};
-use once_cell::sync::{Lazy, OnceCell};
+use logger::{debug, error};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{runtime::Runtime, sync::Mutex};
 use tokio_tungstenite::tungstenite::{handshake::server::{Request, Response}, Message};
-use std::{borrow::Cow, sync::{Arc}, collections::HashMap, fmt::Display, error::Error};
-use std::ops::ControlFlow;
-use std::{net::SocketAddr, path::PathBuf};
+use std::{sync::Arc, collections::HashMap};
+use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
-use futures_util::{pin_mut, SinkExt};
+use futures_util::pin_mut;
 use futures::{stream::StreamExt, future, TryStreamExt};
 
 static WS_STATE: Lazy<Arc<Mutex<HashMap<SocketAddr, UnboundedSender<Message>>>>> = Lazy::new(|| 
@@ -38,7 +37,6 @@ impl Server
             debug!("Websocet доступен на : {}", &addr);
             while let Ok((stream, _)) = listener.accept().await 
             {
-                debug!("НОВОЕ СОЕДИНЕНИЕ!");
                 Self::accept_connection(stream).await;
             }
         });
@@ -93,7 +91,6 @@ impl Server
                 if let Ok(d) = deserialize
                 {
                     let _ = s.unbounded_send(d);
-                    logger::debug!("Полученный объект отправлен сервером в поток сообщений {}",  s.len());
                 }
                 else
                 {
@@ -248,7 +245,6 @@ impl ServerSideMessage
 
         for recp in receivers
         {
-            let ms = msg.to_string();
             recp.unbounded_send(msg.clone()).unwrap();
         }
     }

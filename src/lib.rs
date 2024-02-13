@@ -1,44 +1,12 @@
 mod server;
 mod client;
-use std::{error::Error, net::SocketAddr};
-
-use logger::debug;
-use once_cell::sync::{Lazy, OnceCell};
-use tokio::runtime::Runtime;
 pub use server::{ServerSideMessage, Server};
-
-
-
-// static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
-
-// ///Стртует обработчик соединений websocket стартовать необходимо в рантайме tokio
-// /// типа из tokio::main
-// pub fn start_ws_service(host: &str)
-// {
-//     let addr = host.to_string(); 
-//     ASYNC_RUNTIME.spawn(async move
-//     {
-//         debug!("Стартую websocket...");
-//         // Create the event loop and TCP listener we'll accept connections on.
-//         let try_socket = tokio::net::TcpListener::bind(&addr).await;
-//         let listener = try_socket.expect("Ошибка привязки");
-//         debug!("Websocet доступен на : {}", &addr);
-//         while let Ok((stream, _)) = listener.accept().await 
-//         {
-//             debug!("НОВОЕ СОЕДИНЕНИЕ!");
-//             WsService::accept_connection(stream).await;
-//         }
-//     });
-// }
+pub use client::{start_client, ClientSideMessage};
 
 #[cfg(test)]
 mod test
 {
-    use std::time::Duration;
-
-    use logger::debug;
-    use tokio::runtime::Runtime;
-
+    use std::time::Duration; 
     use crate::{client::{start_client, ClientSideMessage}, server::{ServerSideMessage, Server}};
 
     #[tokio::test]

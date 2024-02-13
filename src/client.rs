@@ -4,7 +4,7 @@ use logger::{debug, error};
 use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::{ runtime::Runtime};
+use tokio::runtime::Runtime;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
@@ -41,7 +41,7 @@ async fn start<F>(addr: String, func: F) where F: Fn(ClientSideMessage) + Send +
             let obj = serde_json::from_slice::<ClientSideMessage>(&data);
             if let Ok(m) = obj
             {
-                debug!("success: {}, payload_type: {}, payload: {:?}", m.success, m.payload_type, m.payload);
+                debug!("Клиентом получено сообщение: success: {}, payload_type: {}, payload: {:?}", m.success, m.payload_type, m.payload);
                 func(m);
             }
             else 
@@ -109,20 +109,5 @@ impl ClientSideMessage
 #[cfg(test)]
 mod test
 {
-    use tokio::runtime::Runtime;
 
-
-    #[tokio::test]
-    pub async fn test_connection()
-    {
-         logger::StructLogger::initialize_logger();
-       
-           
-                //super::start_client().await;
-           
-           
-        loop {
-        }
-        println!("ВСЕ!");
-    }
 }
