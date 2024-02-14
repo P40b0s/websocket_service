@@ -7,6 +7,8 @@ use serde_json::json;
 use tokio::runtime::Runtime;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
+use crate::PayloadTypeEnum;
+
 static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
 static MESSAGES: OnceCell<UnboundedSender<Message>> = OnceCell::new();
 pub fn start_client<F>(addr: &str, func: F) where F: Fn(ClientSideMessage) + Send + 'static + Sync
@@ -65,7 +67,16 @@ pub struct ClientSideMessage
 {
     pub success: bool,
     pub payload_type: String,
-    pub payload: Option<String>
+    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(default="default_option")]
+    pub payload: Option<String>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(default="default_option")]
+    pub object_name: Option<String>
+}
+fn default_option() -> Option<String>
+{
+    None
 }
 
 impl ClientSideMessage
@@ -75,18 +86,35 @@ impl ClientSideMessage
         Self
         {
             success: true,
-            payload_type: "string".to_owned(),
-            payload: Some(msg.to_owned())
-
+            payload_type: PayloadTypeEnum::String.to_string(),
+            payload: Some(msg.to_owned()),
+            object_name: None,
         }
     }
-    pub fn from_number(msg: &i32) -> Self
+    pub fn get_payload_type(&self) -> PayloadTypeEnum
+    {
+        let pl = &self.payload_type;
+        pl.into()
+    }
+    pub fn from_number(msg: i64) -> Self
     {
         Self
         {
             success: true,
-            payload_type: "number".to_owned(),
-            payload: Some(msg.to_string())
+            payload_type: PayloadTypeEnum::Number.to_string(),
+            payload: Some(msg.to_string()),
+            object_name: None
+
+        }
+    }
+    pub fn command(msg: &str) -> Self
+    {
+        Self
+        {
+            success: true,
+            payload_type: PayloadTypeEnum::Command.to_string(),
+            payload: Some(msg.to_string()),
+            object_name: None
 
         }
     }

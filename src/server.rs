@@ -4,18 +4,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{runtime::Runtime, sync::Mutex};
 use tokio_tungstenite::tungstenite::{handshake::server::{Request, Response}, Message};
-use std::{sync::Arc, collections::HashMap};
+use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
 use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::pin_mut;
 use futures::{stream::StreamExt, future, TryStreamExt};
 
+use crate::PayloadTypeEnum;
+///Список подключенных клиентов с каналом для оправки им сообщений
 static WS_STATE: Lazy<Arc<Mutex<HashMap<SocketAddr, UnboundedSender<Message>>>>> = Lazy::new(|| 
 {
     Arc::new(Mutex::new(HashMap::new()))
 });
+///рантай мдля запуска асинхронных операций
 static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
+///Канал получаемых от клиентов сообщений 
 static MESSAGE_RECEIVER: Lazy<Mutex<HashMap<SocketAddr, UnboundedReceiver<ServerSideMessage>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+///Флаг что сообщения из очереди обрабатываются,  
+///ставиться автоматически при вызове замыкания обработки сообщений
+static RECEIVER_WORKER: AtomicBool = AtomicBool::new(false);
+///Трейт для определения какое имя будет у сериализованной структуры  
+/// для автоимплементации есть макрос impl_name!(имя структуры)
 pub trait PayloadType
 {
     fn get_type() -> String;
@@ -30,7 +39,7 @@ impl Server
         let addr = host.to_string(); 
         ASYNC_RUNTIME.spawn(async move
         {
-            debug!("Стартую websocket...");
+            debug!("Старт сервера websocket...");
             // Create the event loop and TCP listener we'll accept connections on.
             let try_socket = tokio::net::TcpListener::bind(&addr).await;
             let listener = try_socket.expect("Ошибка привязки");
@@ -90,7 +99,11 @@ impl Server
                 let deserialize = serde_json::from_slice::<super::ServerSideMessage>(&data);
                 if let Ok(d) = deserialize
                 {
-                    let _ = s.unbounded_send(d);
+                    if RECEIVER_WORKER.load(std::sync::atomic::Ordering::SeqCst)
+                    {
+                        let _ = s.unbounded_send(d);
+                        debug!("Cообщение добавлено в очередь сообщений {}",s.len());
+                    }
                 }
                 else
                 {
@@ -116,11 +129,18 @@ pub struct ServerSideMessage
 {
     ///если success false то в payload будет лежать строка с ошибкой иначе там будет объект на сонове payload_type
     pub success: bool,
-    ///error | payload | somestruct
-    //#[serde(deserialize_with="payload_type_deserializer")]
-    //#[serde(serialize_with="payload_type_serializer")]
+    ///тип нагрузки: string | number | error | array | object | unknown | command
     pub payload_type: String,
-    pub payload: Option<String>
+    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(default="default_option")]
+    pub payload: Option<String>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(default="default_option")]
+    pub object_name: Option<String>
+}
+fn default_option() -> Option<String>
+{
+    None
 }
 
 impl ServerSideMessage
@@ -130,35 +150,39 @@ impl ServerSideMessage
         Self
         {
             success: false,
-            payload_type: "error".to_owned(),
-            payload: Some(error.to_owned())
-
+            payload_type:  PayloadTypeEnum::Error.to_string(),
+            payload: Some(error.to_owned()),
+            object_name: None
         }
+    }
+    pub fn get_payload_type(&self) -> PayloadTypeEnum
+    {
+        let pl = &self.payload_type;
+        pl.into()
     }
     pub fn from_str(msg: &str) -> Self
     {
         Self
         {
             success: true,
-            payload_type: "string".to_owned(),
-            payload: Some(msg.to_owned())
-
+            payload_type:  PayloadTypeEnum::String.to_string(),
+            payload: Some(msg.to_owned()),
+            object_name: None
         }
     }
-    pub fn from_number(msg: &i32) -> Self
+    pub fn from_number(msg: i64) -> Self
     {
         Self
         {
             success: true,
-            payload_type: "number".to_owned(),
-            payload: Some(msg.to_string())
-
+            payload_type:  PayloadTypeEnum::Number.to_string(),
+            payload: Some(msg.to_string()),
+            object_name: None
         }
     }
     pub fn from_struct<T: Serialize + Clone + PayloadType>(val: &T) -> Self
     {
         let ser = serde_json::to_value(val);
-        let mut tp = "".to_owned();
         if ser.is_err()
         {
             let error = ser.err().unwrap();
@@ -169,36 +193,43 @@ impl ServerSideMessage
             let obj = ser.unwrap();
             if obj.is_object()
             {
-                tp = T::get_type();
+                Self
+                {
+                    success: true,
+                    payload_type: PayloadTypeEnum::String.to_string(),
+                    payload: serde_json::to_string(val).ok(),
+                    object_name: Some(T::get_type())
+                }
             }
             else if obj.is_array()
             {
-                tp = [T::get_type(), " array".to_owned()].concat();
+                Self
+                {
+                    success: true,
+                    payload_type:  PayloadTypeEnum::Array.to_string(),
+                    payload: serde_json::to_string(val).ok(),
+                    object_name: Some(T::get_type())
+                }
             }
             else if obj.is_string()
             {
-                tp = "string".to_owned();
+                Self::from_str(obj.as_str().unwrap())
             }
             else if obj.is_number()
             {
-                tp = "number".to_owned();
+                Self::from_number(obj.as_number().unwrap().as_i64().unwrap())
             }
             else 
             {
-                return Self::error(&format!("Тип объекта {:?} пока не обрабатывается", obj.as_str()));
+                Self::error(&format!("Тип объекта {} пока не обрабатывается", serde_json::to_string_pretty(val).unwrap()))
             }
-            Self
-            {
-                success: true,
-                payload_type: tp,
-                payload: serde_json::to_string_pretty(val).ok()
-            }
-            
         }
     }
-
+    ///Если не активировать это замыкание то поступающие от клиента сообщения не будут складываться в канал, ну и обработки сообщений соотвественно не будет
+    /// на случай если клиент не собирается посылать серверу сообщения и обрабатывать их не нужно
     pub fn on_receive_msg<F>(f: F ) where F: Fn(SocketAddr, ServerSideMessage) + Send + 'static
     {
+        RECEIVER_WORKER.store(true, std::sync::atomic::Ordering::SeqCst);
         ASYNC_RUNTIME.spawn(async move
         {
             loop 

@@ -1,7 +1,56 @@
 mod server;
 mod client;
+pub mod macros;
+
+use std::fmt::Display;
+
 pub use server::{ServerSideMessage, Server};
 pub use client::{start_client, ClientSideMessage};
+
+enum PayloadTypeEnum
+{
+    String,
+    Number,
+    Object,
+    Array,
+    Command,
+    Unknown,
+    Error
+}
+impl Display for PayloadTypeEnum
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        match self 
+        {
+            Self::String => f.write_str("string"),
+            Self::Number => f.write_str("number"),
+            Self::Object => f.write_str("object"),
+            Self::Array => f.write_str("array"),
+            Self::Command => f.write_str("command"),
+            Self::Unknown => f.write_str("unknown"),
+            Self::Error => f.write_str("error"),
+        }
+    }
+}
+
+impl From<&String> for PayloadTypeEnum
+{
+    fn from(value: &String) -> Self 
+    {
+        match value.as_str()
+        {
+            "string" => Self::String,
+            "number" => Self::Number,
+            "object" => Self::Object,
+            "array" => Self::Array,
+            "command" => Self::Command,
+            "unknown" => Self::Unknown,
+            "error" => Self::Error,
+            _ => Self::Unknown
+        }
+    }
+} 
 
 #[cfg(test)]
 mod test
@@ -9,7 +58,7 @@ mod test
     use std::time::Duration; 
     use serde::{Deserialize, Serialize};
 
-    use crate::{client::{start_client, ClientSideMessage}, server::{PayloadType, Server, ServerSideMessage}};
+    use crate::{client::{start_client, ClientSideMessage}, impl_name, server::{PayloadType, Server, ServerSideMessage}};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -19,13 +68,7 @@ mod test
         pub age: u32,
         pub legacy: Option<String>
     }
-    impl PayloadType for TestStruct
-    {
-        fn get_type() -> String 
-        {
-            "TestStruct".to_owned()
-        }
-    }
+    impl_name!(TestStruct);
 
     #[tokio::test]
     pub async fn test_connection()
@@ -37,6 +80,8 @@ mod test
         {
             logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
         });
+      
+        /// 
         ServerSideMessage::on_receive_msg(|s, r| 
         {
             logger::info!("Получено сообщение сервером (fn on_receive_msg) {} {:?}", s, r.payload)
