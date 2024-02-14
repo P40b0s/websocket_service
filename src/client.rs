@@ -11,6 +11,14 @@ use crate::PayloadTypeEnum;
 
 static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
 static MESSAGES: OnceCell<UnboundedSender<Message>> = OnceCell::new();
+///необходимо как то остановить основной поток после запуска иначе он выйдет из программы и все
+/// # Examples
+/// ```
+///start_client("ws://127.0.0.1:3010/", |message|
+///{
+///    logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
+///});
+/// ```
 pub fn start_client<F>(addr: &str, func: F) where F: Fn(ClientSideMessage) + Send + 'static + Sync
 {
     let addr = addr.to_owned();
@@ -60,7 +68,9 @@ async fn start<F>(addr: String, func: F) where F: Fn(ClientSideMessage) + Send +
 
 
 
-
+///```
+/// let _ = ClientSideMessage::from_str("тестовая строка от клиента").send().await;
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientSideMessage

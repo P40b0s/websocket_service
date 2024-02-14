@@ -81,7 +81,7 @@ mod test
             logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
         });
       
-        /// 
+        
         ServerSideMessage::on_receive_msg(|s, r| 
         {
             logger::info!("Получено сообщение сервером (fn on_receive_msg) {} {:?}", s, r.payload)
@@ -97,16 +97,9 @@ mod test
                 age: 18,
                 legacy: Some("Тестирование передачи структуры через ws".to_owned())
             };
-            let server_msg = ServerSideMessage::from_str("тестовая строка от сервера");
-            let server_struct_message = ServerSideMessage::from_struct(&test);
-            let client_msg = ClientSideMessage::from_str("тестовая строка от клиента");
-            
-            let _ = server_msg.send_to_all().await;
-            let _ = server_struct_message.send_to_all().await;
-            let _ = client_msg.send().await;
-
-           
-           
+            let _ = ServerSideMessage::from_str("тестовая строка от сервера").send_to_all().await;
+            let _ = ServerSideMessage::from_struct(&test).send_to_all().await;
+            let _ = ClientSideMessage::from_str("тестовая строка от клиента").send().await;
         }
     }
 }

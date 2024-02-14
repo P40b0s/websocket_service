@@ -31,6 +31,15 @@ pub trait PayloadType
 }
 
 ///необходимо как то остановить основной поток после запуска иначе он выйдет из программы и все
+/// # Examples
+/// ```
+///Server::start_server("127.0.0.1:3010");
+///std::thread::sleep(Duration::from_secs(5));
+///ServerSideMessage::on_receive_msg(|s, r| 
+///{
+///    logger::info!("Получено сообщение сервером (fn on_receive_msg) {} {:?}", s, r.payload)
+///});
+/// ```
 pub struct Server;
 impl Server
 {
@@ -122,7 +131,10 @@ impl Server
 }
 
 
-
+///```
+///ServerSideMessage::from_str("тестовая строка от сервера").send_to_all().await;  
+/// let _ = ServerSideMessage::from_struct(&test).send_to_all().await;
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerSideMessage
