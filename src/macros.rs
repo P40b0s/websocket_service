@@ -3,7 +3,7 @@
 macro_rules! impl_name {
         ($name: ident) => {
             
-            impl  PayloadType for $name
+            impl  crate::server::PayloadType for $name
             {
                 fn get_type() -> String
                 {

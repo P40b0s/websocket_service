@@ -346,7 +346,6 @@ mod tests
         }
     }
 
-
     #[test]
     fn test_deserialize_message()
     {
@@ -363,11 +362,5 @@ mod tests
         
     }
 
-    #[test]
-    fn test_deserialize_message_by_url()
-    {
-        logger::StructLogger::initialize_logger();
-        
-    }
 }
 

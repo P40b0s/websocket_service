@@ -4,10 +4,10 @@ pub mod macros;
 
 use std::fmt::Display;
 
-pub use server::{ServerSideMessage, Server};
+pub use server::{ServerSideMessage, Server, PayloadType};
 pub use client::{start_client, ClientSideMessage};
 
-enum PayloadTypeEnum
+pub enum PayloadTypeEnum
 {
     String,
     Number,

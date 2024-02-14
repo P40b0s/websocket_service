@@ -147,5 +147,19 @@ impl ClientSideMessage
 #[cfg(test)]
 mod test
 {
+    use std::time::Duration;
 
+    #[tokio::test]
+    async fn test_client()
+    {
+        logger::StructLogger::initialize_logger();
+        super::start_client("ws://127.0.0.1:3010/", |message|
+        {
+            logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
+        });
+        loop 
+        {
+            std::thread::sleep(Duration::from_secs(5));
+        }
+    }
 }
