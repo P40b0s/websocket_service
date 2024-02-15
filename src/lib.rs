@@ -5,7 +5,7 @@ pub mod macros;
 use std::fmt::Display;
 
 pub use server::{ServerSideMessage, Server, PayloadType};
-pub use client::{ClientSideMessage};
+pub use client::{start_client, ClientSideMessage};
 
 pub enum PayloadTypeEnum
 {
@@ -58,7 +58,7 @@ mod test
     use std::time::Duration; 
     use serde::{Deserialize, Serialize};
 
-    use crate::{client::{Client, ClientSideMessage}, impl_name, server::{PayloadType, Server, ServerSideMessage}};
+    use crate::{client::{start_client, ClientSideMessage}, impl_name, server::{PayloadType, Server, ServerSideMessage}};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -76,14 +76,10 @@ mod test
         logger::StructLogger::initialize_logger();
         Server::start_server("127.0.0.1:3010");
         std::thread::sleep(Duration::from_secs(5));
-        let client = Client::new("ws://127.0.0.1:3010/", |message|
+        start_client("ws://127.0.0.1:3010/", |message|
         {
             logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
         });
-        // start_client("ws://127.0.0.1:3010/", |message|
-        // {
-        //     logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
-        // });
       
         
         ServerSideMessage::on_receive_msg(|s, r| 
@@ -103,7 +99,6 @@ mod test
             };
             let _ = ServerSideMessage::from_str("тестовая строка от сервера").send_to_all().await;
             let _ = ServerSideMessage::from_struct(&test).send_to_all().await;
-            client.send_message(ClientSideMessage::from_str("тестовая строка от клиента")).await;
             //let _ = ClientSideMessage::from_str("тестовая строка от клиента").send().await;
         }
     }
