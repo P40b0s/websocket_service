@@ -119,6 +119,11 @@ impl Server
                     logger::error!("Ошибка десериализации обьекта {:?} поступившего от клиента {} ", &data, &addr);
                 }
             }
+            else if msg.is_ping()
+            {
+                debug!("Сервером получено сообщение ping");
+            }
+
             future::ok(())
         });
         let receive_from_others = receiver.map(Ok).forward(outgoing);
@@ -325,8 +330,12 @@ impl ServerSideMessage
 #[cfg(test)]
 mod tests
 {
+    use std::time::Duration;
+
     use logger::{debug, error};
     use serde::{Deserialize, Serialize};
+
+    use crate::Server;
 
     use super::{ServerSideMessage, PayloadType};
 
@@ -358,9 +367,17 @@ mod tests
         };
         let n = ServerSideMessage::from_struct(&test);
         debug!("type: {}, payload: {:?}", n.payload_type, n.payload);
-        
-        
     }
 
+    #[tokio::test]
+    async fn test_server()
+    {
+        logger::StructLogger::initialize_logger();
+        Server::start_server("127.0.0.1:3010");
+        loop 
+        {
+            std::thread::sleep(Duration::from_secs(5));
+        }
+    }
 }
 
