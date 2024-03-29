@@ -1,56 +1,14 @@
 mod server;
 mod client;
 pub mod macros;
+mod message;
 
 use std::fmt::Display;
 
-pub use server::{ServerSideMessage, Server, PayloadType};
-pub use client::{start_client, ClientSideMessage};
+use serde::{Deserialize, Serialize};
+pub use server::{Server, PayloadType};
+pub use client::{start_client};
 
-pub enum PayloadTypeEnum
-{
-    String,
-    Number,
-    Object,
-    Array,
-    Command,
-    Unknown,
-    Error
-}
-impl Display for PayloadTypeEnum
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
-    {
-        match self 
-        {
-            Self::String => f.write_str("string"),
-            Self::Number => f.write_str("number"),
-            Self::Object => f.write_str("object"),
-            Self::Array => f.write_str("array"),
-            Self::Command => f.write_str("command"),
-            Self::Unknown => f.write_str("unknown"),
-            Self::Error => f.write_str("error"),
-        }
-    }
-}
-
-impl From<&String> for PayloadTypeEnum
-{
-    fn from(value: &String) -> Self 
-    {
-        match value.as_str()
-        {
-            "string" => Self::String,
-            "number" => Self::Number,
-            "object" => Self::Object,
-            "array" => Self::Array,
-            "command" => Self::Command,
-            "unknown" => Self::Unknown,
-            "error" => Self::Error,
-            _ => Self::Unknown
-        }
-    }
-} 
 
 #[cfg(test)]
 mod test
@@ -58,7 +16,7 @@ mod test
     use std::time::Duration; 
     use serde::{Deserialize, Serialize};
 
-    use crate::{client::{start_client, ClientSideMessage}, impl_name, server::{PayloadType, Server, ServerSideMessage}};
+    use crate::{client::{start_client, ClientMessage}, impl_name, message::WebsocketMessage, server::{PayloadType, Server}};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -74,31 +32,23 @@ mod test
     pub async fn test_connection()
     {
         logger::StructLogger::initialize_logger();
-        Server::start_server("127.0.0.1:3010");
-        std::thread::sleep(Duration::from_secs(5));
-        start_client("ws://127.0.0.1:3010/", |message|
+        tokio::spawn(async
         {
-            logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
+            Server::start_server("127.0.0.1:3010").await;
         });
-      
-        
-        ServerSideMessage::on_receive_msg(|s, r| 
+       
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        tokio::spawn(async
         {
-            logger::info!("Получено сообщение сервером (fn on_receive_msg) {} {:?}", s, r.payload)
+            start_client("ws://127.0.0.1:3010/").await;
         });
             
-        
         loop 
         {
-            std::thread::sleep(Duration::from_secs(5));
-            let test = TestStruct
-            {
-                success: true,
-                age: 18,
-                legacy: Some("Тестирование передачи структуры через ws".to_owned())
-            };
-            let _ = ServerSideMessage::from_str("тестовая строка от сервера").send_to_all().await;
-            let _ = ServerSideMessage::from_struct(&test).send_to_all().await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            let wsmsg: WebsocketMessage = "test_cmd:test_method".into();
+             _ = wsmsg.send_message().await;
+            //let _ = ServerSideMessage::from_struct(&test).send_to_all().await;
             //let _ = ClientSideMessage::from_str("тестовая строка от клиента").send().await;
         }
     }
