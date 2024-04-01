@@ -6,9 +6,15 @@ edition = "2021"
 [lib]
 name = "websocket_service"
 path = "src/lib.rs"
+
+[features]
+default = ["client", "server"]
+client = []
+server = []
+
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-
 url="2.5.0"
 logger = {git = "https://github.com/P40b0s/logger.git", branch = "main"}
 serde = {version = "1.0.196", features = ["derive"]}
@@ -19,3 +25,5 @@ tokio-tungstenite="0.21.0"
 futures = "0.3.30"
 futures-channel = "0.3.30"
 futures-util = { version = "0.3.30", default-features = false, features = ["sink", "std"] }
+flatbuffers = "23.5.26"
+flexbuffers = "2.0.0"

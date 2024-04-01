@@ -1,202 +1,112 @@
 use std::sync::atomic::AtomicBool;
-
-use futures_channel::mpsc::{unbounded, UnboundedSender};
+use futures::SinkExt;
+use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
 use logger::{debug, error};
-use once_cell::sync::{Lazy, OnceCell};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tokio::runtime::Runtime;
+use once_cell::sync::OnceCell;
+use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use crate::message::WebsocketMessage;
 
-use crate::PayloadTypeEnum;
-///TODO надо подумать как рестартить клиента, эти значения придется реинициализировать
-static ASYNC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
-static MESSAGES: OnceCell<UnboundedSender<Message>> = OnceCell::new();
-static CLIENT_STATUS : AtomicBool = AtomicBool::new(false);
-static CLOSURE : OnceCell<Box<dyn Fn(ClientSideMessage) + Send + 'static + Sync>> = OnceCell::new();
+static SENDER: OnceCell<UnboundedSender<Message>> = OnceCell::new();
+static RECEIVER: OnceCell<Mutex<UnboundedReceiver<WebsocketMessage>>> = OnceCell::new();
+static RECEIVER_FN_ISACTIVE: AtomicBool = AtomicBool::new(false);
 
-pub trait MessageLayer
+pub struct Client{}
+impl Client
 {
-    async fn ping(&self);
-    async fn send_message<M: Serialize>(&self, msg: M);
-}
-// impl MessageLayer for Client
-// {
-//     async fn send_message<M: Serialize>(&self, msg: M)
-//     {
-//         let msg = serde_json::to_string(&msg).unwrap();
-//         let msg = Message::binary(msg);
-//         if let Ok(s) = self.sender.unbounded_send(msg)
-//         {
-            
-//         }
-//         else
-//         {
-//             error!("Ошибка отправки сообщения серверу")
-//         }
-//     }
-//     async fn ping(&self)
-//     {
-//         let msg = Message::Ping([12].to_vec());
-//         if let Ok(s) = self.sender.unbounded_send(msg)
-//         {
-            
-//         }
-//         else
-//         {
-//             error!("Ошибка отправки сообщения серверу")
-//         }
-//     }
-// }
-///необходимо как то остановить основной поток после запуска иначе он выйдет из программы и все
-/// # Examples
-/// ```
-///start_client("ws://127.0.0.1:3010/", |message|
-///{
-///    logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
-///});
-/// ```
-pub fn start_client<F>(addr: &str, func: F) where F: Fn(ClientSideMessage) + Send + 'static + Sync
-{
-    CLOSURE.set(Box::new(func));
-    let addr = addr.to_owned();
-    ASYNC_RUNTIME.spawn(async move
+    ///необходимо как то остановить основной поток после запуска иначе он выйдет из программы и все
+    /// # Examples
+    /// ```
+    ///start_client("ws://127.0.0.1:3010/", |message|
+    ///{
+    ///    logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
+    ///});
+    /// ```
+    pub async fn start_client(addr: &str)
     {
-        start(addr).await;
-    });
-    
-}
-///ws://127.0.0.1:3010/
-async fn start(addr: String)
-{
-    let (sender, receiver) = unbounded::<Message>();
-    let _ = MESSAGES.set(sender);
-    let (ws_stream, resp) = connect_async(&addr).await.expect("Ошибка соединения с сервером");
-    println!("Рукопожатие с сервером успешно");
-    for h in resp.headers()
-    {
-        debug!("* {}: {}", h.0.as_str(), h.1.to_str().unwrap());
-    }
-    let (write, read) = ws_stream.split();
-    let outgoing = receiver.map(Ok).forward(write);
-    let incoming = 
-    {
-        read.try_for_each(|message|
+        let addr = addr.to_owned();
+        tokio::spawn(async move
         {
-            if message.is_pong()
+            Self::start(addr).await;
+        });
+    }
+    ///ws://127.0.0.1:3010/
+    async fn start(addr: String)
+    {
+        let (sender, local_receiver) = unbounded::<Message>();
+        let (mut local_sender, receiver) = unbounded::<WebsocketMessage>();
+        let _ = SENDER.set(sender);
+        let _ = RECEIVER.set(Mutex::new(receiver));
+        let (ws_stream, resp) = connect_async(&addr).await
+        .expect("Ошибка соединения с сервером");
+        println!("Рукопожатие с сервером успешно");
+        for h in resp.headers()
+        {
+            debug!("* {}: {}", h.0.as_str(), h.1.to_str().unwrap());
+        }
+        let (write, read) = ws_stream.split();
+        let outgoing = local_receiver.map(Ok).forward(write);
+        let incoming = 
+        {
+            read.try_for_each(|message|
             {
-                debug!("получено сообщение pong {}",message.is_pong())
-            }
-            else
+                if message.is_pong()
+                {
+                    debug!("получено сообщение pong {}",message.is_pong())
+                }
+                else
+                {
+                    let msg =  TryInto::<WebsocketMessage>::try_into(&message);
+                    if let Ok(m) = msg
+                    {
+                    
+                        debug!("Клиентом получено сообщение: success: {}, command: {}, method: {}", m.success, m.command.target, m.command.method);
+                        if RECEIVER_FN_ISACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+                        {
+                            let _ = local_sender.send(m);
+                        }
+                    }
+                    else 
+                    {
+                        logger::error!("Ошибка десериализации объекта: {}", msg.err().unwrap());
+                    }
+                }
+                future::ok(())
+            })
+        };
+        pin_mut!(outgoing, incoming);
+        future::select(outgoing, incoming).await;
+    }
+
+    pub async fn on_receive_message<F: Fn(WebsocketMessage) + Send + Sync + 'static>(f: F )
+    {
+        RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
+        tokio::spawn(async move
+        {
+            let receiver = RECEIVER.get().unwrap();
+            let mut r = receiver.lock().await;
+            while let Some(msg) = r.next().await 
             {
-                let data = message.into_data();
-                let obj = serde_json::from_slice::<ClientSideMessage>(&data);
-                if let Ok(m) = obj
-                {
-                    debug!("Клиентом получено сообщение: success: {}, payload_type: {}, payload: {:?}", m.success, m.payload_type, m.payload);
-                    let func = CLOSURE.get().unwrap();
-                    func(m);
-                }
-                else 
-                {
-                    logger::error!("Ошибка десериализации объекта: {}", obj.err().unwrap());
-                }
+                f(msg);
             }
-            future::ok(())
-        })
-    };
-    pin_mut!(outgoing, incoming);
-    future::select(outgoing, incoming).await;
-}
-
-
-
-
-///```
-/// let _ = ClientSideMessage::from_str("тестовая строка от клиента").send().await;
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClientSideMessage
-{
-    pub success: bool,
-    pub payload_type: String,
-    #[serde(skip_serializing_if="Option::is_none")]
-    #[serde(default="default_option")]
-    pub payload: Option<String>,
-    #[serde(skip_serializing_if="Option::is_none")]
-    #[serde(default="default_option")]
-    pub object_name: Option<String>
-}
-fn default_option() -> Option<String>
-{
-    None
-}
-
-impl ClientSideMessage
-{
-    pub fn from_str(msg: &str) -> Self
-    {
-        Self
-        {
-            success: true,
-            payload_type: PayloadTypeEnum::String.to_string(),
-            payload: Some(msg.to_owned()),
-            object_name: None,
-        }
+        });
     }
-    pub fn get_payload_type(&self) -> PayloadTypeEnum
+    pub async fn send_message(wsmsg: &WebsocketMessage)
     {
-        let pl = &self.payload_type;
-        pl.into()
-    }
-    pub fn from_number(msg: i64) -> Self
-    {
-        Self
+        if let Ok(msg) = wsmsg.try_into()
         {
-            success: true,
-            payload_type: PayloadTypeEnum::Number.to_string(),
-            payload: Some(msg.to_string()),
-            object_name: None
-
-        }
-    }
-    pub fn command(msg: &str) -> Self
-    {
-        Self
-        {
-            success: true,
-            payload_type: PayloadTypeEnum::Command.to_string(),
-            payload: Some(msg.to_string()),
-            object_name: None
-
-        }
-    }
-    async fn send_message<M: Serialize>(&self)
-    {
-        let msg = serde_json::to_string(&self).unwrap();
-        let msg = Message::binary(msg);
-        if let Ok(s) = MESSAGES.get().unwrap().unbounded_send(msg)
-        {
-            
+            let _ = SENDER.get().unwrap().unbounded_send(msg);
         }
         else
         {
             error!("Ошибка отправки сообщения серверу")
         }
     }
-    async fn ping()
+    pub async fn ping()
     {
         let msg = Message::Ping([12].to_vec());
-        if let Ok(s) = MESSAGES.get().unwrap().unbounded_send(msg)
-        {
-            
-        }
-        else
-        {
-            error!("Ошибка отправки сообщения серверу")
-        }
+        let _ = SENDER.get().unwrap().unbounded_send(msg);
     }
 }
 
@@ -204,22 +114,17 @@ impl ClientSideMessage
 #[cfg(test)]
 mod test
 {
-    use std::time::Duration;
-
-    use crate::ClientSideMessage;
+    use super::Client;
 
     #[tokio::test]
     async fn test_client()
     {
         logger::StructLogger::initialize_logger();
-        super::start_client("ws://127.0.0.1:3010/", |message|
-        {
-            logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
-        });
+        super::Client::start_client("ws://127.0.0.1:3010/").await;
         loop 
         {
-            std::thread::sleep(Duration::from_secs(5));
-            let _ = ClientSideMessage::ping().await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            let _ = Client::ping().await;
         }
     }
 }
