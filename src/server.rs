@@ -42,12 +42,20 @@ impl Server
             debug!("Старт сервера websocket...");
             // Create the event loop and TCP listener we'll accept connections on.
             let try_socket = tokio::net::TcpListener::bind(&addr).await;
-            let listener = try_socket.expect("Ошибка привязки");
-            debug!("Websocet доступен на : {}", &addr);
-            while let Ok((stream, _)) = listener.accept().await 
+            let listener = try_socket;
+            if let Ok(lis) = listener
             {
-                Self::accept_connection(stream).await;
+                debug!("Websocet доступен на : {}", &addr);
+                while let Ok((stream, _)) = lis.accept().await 
+                {
+                    Self::accept_connection(stream).await;
+                }
             }
+            else
+            {
+                logger::error!("Ошибка запуска сервера: {}", listener.unwrap_err().to_string())
+            }
+           
         });
     }
     async fn add_message_receiver(socket: &SocketAddr, receiver: UnboundedReceiver<WebsocketMessage>)
