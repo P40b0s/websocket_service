@@ -45,11 +45,4 @@ mod test
              _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
         }
     }
-
-    #[tokio::test]
-    pub async fn test_connection()
-    {
-        logger::StructLogger::initialize_logger();
-        
-    }
 }

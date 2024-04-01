@@ -22,6 +22,23 @@ pub struct WebsocketMessage
     pub success: bool,
     pub command: Command,
 }
+impl WebsocketMessage
+{
+    pub fn new(target: &str, method: &str, payload: Option<&[u8]>) -> Self
+    {
+        Self
+        {
+            success: true,
+            command: Command 
+            { 
+                target: target.to_owned(),
+                method: method.to_owned(),
+                args: None,
+                payload: payload.and_then(|a| Some(a.to_vec())) 
+            }
+        }
+    }
+}
 
 fn default_payload_option() -> Option<Vec<u8>>
 {
