@@ -888,3 +888,9 @@
 [29-03-2024 16:36:41]:⚙ DEBUG -> Сервером получено сообщение: success command target test_cmd method test_method '$8A
 $h$
 [29-03-2024 16:36:41]:⚙ DEBUG -> Сервером получено сообщение: WebsocketMessage { success: true, command: Command { target: "test_cmd", method: "test_method", args: None, payload: None } }
+[29-03-2024 16:36:46]:⚙ DEBUG -> Сервером получено сообщение: success command target test_cmd method test_method '$8A
+$h$
+[29-03-2024 16:36:46]:⚙ DEBUG -> Сервером получено сообщение: WebsocketMessage { success: true, command: Command { target: "test_cmd", method: "test_method", args: None, payload: None } }
+[29-03-2024 16:36:51]:⚙ DEBUG -> Сервером получено сообщение: success command target test_cmd method test_method '$8A
+$h$
+[29-03-2024 16:36:51]:⚙ DEBUG -> Сервером получено сообщение: WebsocketMessage { success: true, command: Command { target: "test_cmd", method: "test_method", args: None, payload: None } }

@@ -1,6 +1,5 @@
-use std::{fmt::Display};
-
 use serde::{Deserialize, Serialize};
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -70,48 +69,43 @@ impl From<&str> for WebsocketMessage
 }
 
 
-// #[derive(PartialEq)]
-// pub enum PayloadTypeEnum
-// {
-//     String,
-//     Number,
-//     Object,
-//     Array,
-//     Command,
-//     Unknown,
-//     Error
-// }
-// impl Display for PayloadTypeEnum
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
-//     {
-//         match self 
-//         {
-//             Self::String => f.write_str("string"),
-//             Self::Number => f.write_str("number"),
-//             Self::Object => f.write_str("object"),
-//             Self::Array => f.write_str("array"),
-//             Self::Command => f.write_str("command"),
-//             Self::Unknown => f.write_str("unknown"),
-//             Self::Error => f.write_str("error"),
-//         }
-//     }
-// }
 
-// impl From<&String> for PayloadTypeEnum
-// {
-//     fn from(value: &String) -> Self 
-//     {
-//         match value.as_str()
-//         {
-//             "string" => Self::String,
-//             "number" => Self::Number,
-//             "object" => Self::Object,
-//             "array" => Self::Array,
-//             "command" => Self::Command,
-//             "unknown" => Self::Unknown,
-//             "error" => Self::Error,
-//             _ => Self::Unknown
-//         }
-//     }
-// } 
+impl TryFrom<&WebsocketMessage> for Message
+{
+    type Error = String;
+    fn try_from(value: &WebsocketMessage) -> Result<Self, Self::Error> 
+    {
+        let mut s = flexbuffers::FlexbufferSerializer::new();
+        let _ = value.serialize(&mut s).map_err(|e| e.to_string());
+        let obj = s.view();
+        let msg = Message::binary(obj);
+        Ok(msg)
+   }
+}
+
+impl TryFrom<&Message> for WebsocketMessage
+{
+    type Error = String;
+    fn try_from(value: &Message) -> Result<Self, Self::Error> 
+    {
+        if !value.is_binary()
+        {
+            let err = "Поступившее сообщение не содержит бинарных данных".to_string();
+            logger::error!("{}", &err);
+            return Err(err);
+        }
+        let data = value.to_owned().into_data();
+        let r = flexbuffers::Reader::get_root(data.as_slice()).unwrap();
+        let deserialize = WebsocketMessage::deserialize(r);
+        if let Ok(d) = deserialize
+        {
+            return Ok(d);
+        }
+        else
+        {
+            let err = format!("Ошибка десериализации обьекта {:?} поступившего от клиента", &data);
+            logger::error!("{}", &err);
+            return Err(err);
+        }
+    }
+}

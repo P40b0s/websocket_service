@@ -1,55 +1,48 @@
+#[cfg(feature = "server")]
 mod server;
+#[cfg(feature = "client")]
 mod client;
-pub mod macros;
 mod message;
-
-use std::fmt::Display;
-
-use serde::{Deserialize, Serialize};
-pub use server::{Server, PayloadType};
-pub use client::{start_client};
+pub use message::WebsocketMessage;
+#[cfg(feature = "server")]
+pub use server::Server;
+#[cfg(feature = "client")]
+pub use client::Client;
 
 
 #[cfg(test)]
 mod test
 {
-    use std::time::Duration; 
-    use serde::{Deserialize, Serialize};
-
-    use crate::{client::{start_client, ClientMessage}, impl_name, message::WebsocketMessage, server::{PayloadType, Server}};
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct TestStruct
-    {
-        pub success: bool,
-        pub age: u32,
-        pub legacy: Option<String>
-    }
-    impl_name!(TestStruct);
-
+    use logger::debug;
+    use crate::message::WebsocketMessage;
+    #[cfg(feature = "client")]
+    use crate::Client;
+    #[cfg(feature = "server")]
+    use crate::Server;
+    #[cfg(feature = "server")]
+    #[cfg(feature = "client")]
     #[tokio::test]
     pub async fn test_connection()
     {
         logger::StructLogger::initialize_logger();
-        tokio::spawn(async
-        {
-            Server::start_server("127.0.0.1:3010").await;
-        });
-       
+        Server::start_server("127.0.0.1:3010").await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        tokio::spawn(async
+        Client::start_client("ws://127.0.0.1:3010/").await;
+        let _ = Client::on_receive_message(|msg|
         {
-            start_client("ws://127.0.0.1:3010/").await;
-        });
-            
+            debug!("Клиентом полчено сообщение через канал {}", &msg.command.target);
+        }).await;
+        Server::on_receive_msg(|addr, msg|
+        {
+            debug!("Сервером полчено сообщение от {} через канал {}", addr, &msg.command.target);
+        }).await;
         loop 
         {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let wsmsg: WebsocketMessage = "test_cmd:test_method".into();
-             _ = wsmsg.send_message().await;
-            //let _ = ServerSideMessage::from_struct(&test).send_to_all().await;
-            //let _ = ClientSideMessage::from_str("тестовая строка от клиента").send().await;
+            let cli_wsmsg: WebsocketMessage = "test_client_cmd:test_client_method".into();
+            let srv_wsmsg: WebsocketMessage = "test_server_cmd:test_server_method".into();
+             _ = Client::send_message(&cli_wsmsg).await;
+             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
         }
     }
 }
