@@ -25,6 +25,7 @@ pub struct WebsocketMessage
 }
 impl WebsocketMessage
 {
+    ///новый экземпляр в котором нужно самостоятельно серализовать данные с помощью схемы flexbuffers
     pub fn new(target: &str, method: &str, payload: Option<&[u8]>) -> Self
     {
         Self
@@ -39,6 +40,34 @@ impl WebsocketMessage
             }
         }
     }
+    ///Новый экземпляр с сериализаций fexbuffers
+    pub fn new_with_flex_serialize<T: Serialize>(target: &str, method: &str, payload: Option<T>) -> Self
+    {
+        let payload = payload.and_then(|pl|
+        {
+            let mut s = flexbuffers::FlexbufferSerializer::new();
+            let _ = pl.serialize(&mut s).map_err(|e| e.to_string());
+            Some(s.view().to_vec())
+        });
+        Self
+        {
+            success: true,
+            command: Command 
+            { 
+                target: target.to_owned(),
+                method: method.to_owned(),
+                args: None,
+                payload
+            }
+        }
+    }
+    ///добавить аргументы к текущей команде
+    pub fn add_args(mut self, args: &[String]) -> Self
+    {
+        self.command.args.as_mut().and_then(|a| Some(a.extend_from_slice(args)));
+        self
+    }
+    ///извлечь нагрузку из текущего сообщения
     pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : Deserialize<'de>
     {
         if let Some(pl) = &self.command.payload
@@ -107,7 +136,7 @@ impl TryFrom<&WebsocketMessage> for Message
     fn try_from(value: &WebsocketMessage) -> Result<Self, Self::Error> 
     {
         let mut s = flexbuffers::FlexbufferSerializer::new();
-        let _ = value.serialize(&mut s).map_err(|e| e.to_string());
+        let _ = value.serialize(&mut s).map_err(|e| e.to_string())?;
         let obj = s.view();
         let msg = Message::binary(obj);
         Ok(msg)

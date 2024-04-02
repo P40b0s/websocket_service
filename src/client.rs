@@ -15,13 +15,22 @@ static RECEIVER_FN_ISACTIVE: AtomicBool = AtomicBool::new(false);
 pub struct Client{}
 impl Client
 {
-    ///необходимо как то остановить основной поток после запуска иначе он выйдет из программы и все
     /// # Examples
     /// ```
-    ///start_client("ws://127.0.0.1:3010/", |message|
-    ///{
-    ///    logger::info!("Клиентом получено новое сообщение {:?}", message.payload);
-    ///});
+    /// async run_client()
+    /// {
+    ///     Client::start_client("ws://127.0.0.1:3010/").await;
+    ///     let _ = Client::on_receive_message(|msg|
+    ///     {
+    ///         println!("Клиентом полчено сообщение через канал {}", &msg.command.target);
+    ///     }).await;
+    ///     loop
+    ///     {
+    ///         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    ///         let cli_wsmsg: WebsocketMessage = "test_client_cmd:test_client_method".into();
+    ///         _ = Client::send_message(&cli_wsmsg).await;
+    ///     }
+    /// }
     /// ```
     pub async fn start_client(addr: &str)
     {
@@ -61,7 +70,7 @@ impl Client
                     if let Ok(m) = msg
                     {
                     
-                        debug!("Клиентом получено сообщение: success: {}, command: {}, method: {}", m.success, m.command.target, m.command.method);
+                        //debug!("Клиентом получено сообщение: success: {}, command: {}, method: {}", m.success, m.command.target, m.command.method);
                         if RECEIVER_FN_ISACTIVE.load(std::sync::atomic::Ordering::SeqCst)
                         {
                             let _ = local_sender.send(m);

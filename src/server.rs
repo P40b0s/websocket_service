@@ -21,15 +21,21 @@ static MESSAGE_RECEIVER: Lazy<Mutex<HashMap<SocketAddr, UnboundedReceiver<Websoc
 static RECEIVER_WORKER: AtomicBool = AtomicBool::new(false);
 
 
-///необходимо как то остановить основной поток после запуска иначе он выйдет из программы и все
 /// # Examples
 /// ```
-///Server::start_server("127.0.0.1:3010");
+///Server::start_server("127.0.0.1:3010").await;
 ///std::thread::sleep(Duration::from_secs(5));
-///ServerSideMessage::on_receive_msg(|s, r| 
+///Server::on_receive_msg(|addr, msg|
 ///{
-///    logger::info!("Получено сообщение сервером (fn on_receive_msg) {} {:?}", s, r.payload)
-///});
+///    debug!("Сервером полчено сообщение от {} через канал {}", addr, &msg.command.target);
+///    
+///}).await;
+///loop
+///{
+///    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+///    let srv_wsmsg: WebsocketMessage = "test_server_cmd:test_server_method".into();
+///    _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
+///}
 /// ```
 pub struct Server;
 impl Server
@@ -98,10 +104,10 @@ impl Server
         {
             if !msg.is_ping() && !msg.is_pong() && !msg.is_empty() && !msg.is_close()
             {
-                if let Ok(m) = msg.clone().into_text()
-                {
-                    debug!("Сервером получено сообщение: {}", m);
-                }
+                // if let Ok(m) = msg.clone().into_text()
+                // {
+                //     debug!("Сервером получено сообщение: {}", m);
+                // }
                 
                 let msg =  TryInto::<WebsocketMessage>::try_into(&msg);
                 if let Ok(d) = msg
@@ -110,7 +116,7 @@ impl Server
                     if RECEIVER_WORKER.load(std::sync::atomic::Ordering::SeqCst)
                     {
                         let _ = s.unbounded_send(d);
-                        debug!("Cообщение добавлено в очередь сообщений {}",s.len());
+                        //debug!("Cообщение добавлено в очередь сообщений {}",s.len());
                     }
                 }
                 else
