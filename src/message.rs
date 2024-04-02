@@ -41,7 +41,7 @@ impl WebsocketMessage
         }
     }
     ///Новый экземпляр с сериализаций fexbuffers
-    pub fn new_with_flex_serialize<T: Serialize>(target: &str, method: &str, payload: Option<T>) -> Self
+    pub fn new_with_flex_serialize<T: Serialize>(target: &str, method: &str, payload: Option<&T>) -> Self
     {
         let payload = payload.and_then(|pl|
         {
