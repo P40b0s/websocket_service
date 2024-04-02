@@ -35,14 +35,15 @@ mod test
         Server::on_receive_msg(|addr, msg|
         {
             debug!("Сервером полчено сообщение от {} через канал {}", addr, &msg.command.target);
+            
         }).await;
-        loop 
+        loop
         {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             let cli_wsmsg: WebsocketMessage = "test_client_cmd:test_client_method".into();
             let srv_wsmsg: WebsocketMessage = "test_server_cmd:test_server_method".into();
-             _ = Client::send_message(&cli_wsmsg).await;
-             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
+            _ = Client::send_message(&cli_wsmsg).await;
+            _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
         }
     }
 }

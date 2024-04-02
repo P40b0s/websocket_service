@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite::Message;
+use anyhow::{anyhow, bail, Context, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +37,19 @@ impl WebsocketMessage
                 args: None,
                 payload: payload.and_then(|a| Some(a.to_vec())) 
             }
+        }
+    }
+    pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : Deserialize<'de>
+    {
+        if let Some(pl) = &self.command.payload
+        {
+            let r = flexbuffers::Reader::get_root(pl.as_slice())?;
+            let deserialize = T::deserialize(r).with_context(|| format!("Данный объект отличается от того который вы хотите получить"))?;
+            return Ok(deserialize);
+        }
+        else 
+        {
+            return Err(anyhow!("В данном сообщении {}:{} отсуствует объект для десериализации", &self.command.target, &self.command.method));
         }
     }
 }
