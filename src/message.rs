@@ -15,6 +15,32 @@ pub struct Command
     #[serde(default="default_payload_option")]
     pub payload: Option<Vec<u8>>,
 }
+impl Command
+{
+    pub fn get_target(&self) -> &str
+    {
+        &self.target
+    }
+    pub fn get_method(&self) -> &str
+    {
+        &self.method
+    }
+    ///извлечь нагрузку из текущего сообщения
+    pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : Deserialize<'de>
+    {
+        if let Some(pl) = &self.payload
+        {
+            let r = flexbuffers::Reader::get_root(pl.as_slice())?;
+            let deserialize = T::deserialize(r).with_context(|| format!("Данный объект отличается от того который вы хотите получить"))?;
+            return Ok(deserialize);
+        }
+        else 
+        {
+            return Err(anyhow!("В данном сообщении {}:{} отсуствует объект для десериализации", &self.target, &self.method));
+        }
+    }
+
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,20 +93,7 @@ impl WebsocketMessage
         self.command.args.as_mut().and_then(|a| Some(a.extend_from_slice(args)));
         self
     }
-    ///извлечь нагрузку из текущего сообщения
-    pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : Deserialize<'de>
-    {
-        if let Some(pl) = &self.command.payload
-        {
-            let r = flexbuffers::Reader::get_root(pl.as_slice())?;
-            let deserialize = T::deserialize(r).with_context(|| format!("Данный объект отличается от того который вы хотите получить"))?;
-            return Ok(deserialize);
-        }
-        else 
-        {
-            return Err(anyhow!("В данном сообщении {}:{} отсуствует объект для десериализации", &self.command.target, &self.command.method));
-        }
-    }
+   
 }
 
 fn default_payload_option() -> Option<Vec<u8>>
