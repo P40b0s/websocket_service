@@ -73,7 +73,7 @@ impl Client
                         //debug!("Клиентом получено сообщение: success: {}, command: {}, method: {}", m.success, m.command.target, m.command.method);
                         if RECEIVER_FN_ISACTIVE.load(std::sync::atomic::Ordering::SeqCst)
                         {
-                            let _ = local_sender.send(m);
+                            let _ = local_sender.unbounded_send(m);
                         }
                     }
                     else 
@@ -88,7 +88,7 @@ impl Client
         future::select(outgoing, incoming).await;
     }
 
-    pub async fn on_receive_message<F: Fn(WebsocketMessage) + Send + Sync + 'static>(f: F )
+    pub async fn on_receive_message<F: Send + 'static + Fn(WebsocketMessage) -> Fut, Fut: std::future::Future<Output = ()> + Send>(f: F)
     {
         RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
         tokio::spawn(async move
@@ -97,7 +97,7 @@ impl Client
             let mut r = receiver.lock().await;
             while let Some(msg) = r.next().await 
             {
-                f(msg);
+                f(msg).await;
             }
         });
     }

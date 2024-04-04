@@ -140,7 +140,8 @@ impl Server
 
     ///Если не активировать это замыкание то поступающие от клиента сообщения не будут складываться в канал, ну и обработки сообщений соотвественно не будет
     /// на случай если клиент не собирается посылать серверу сообщения и обрабатывать их не нужно
-    pub async fn on_receive_msg<F>(f: F ) where F: Fn(SocketAddr, WebsocketMessage) + Send + 'static
+    pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(f: F)
+    where F:  Send + 'static + Fn(SocketAddr, WebsocketMessage) -> Fut
     {
         RECEIVER_WORKER.store(true, std::sync::atomic::Ordering::SeqCst);
         tokio::spawn(async move
@@ -154,16 +155,17 @@ impl Server
                     {
                         if let Some(m) = m
                         {
-                            f(addr.clone(), m);
+                            f(addr.clone(), m).await;
                         }
                     }
                 }
             }
         });
     }
+    /// Сообщения всем подключеным клиентам
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
-        // We want to broadcast the message to everyone except ourselves.
+       
         let state = CLIENTS
         .lock()
         .await;
@@ -183,9 +185,10 @@ impl Server
             logger::error!("Ошибка массовой рассылки сообщения {:?}", &msg.unwrap_err().to_string());
         }
     }
+    ///Сообщения всем подключеным клиентам кроме того что передан параметром addr
     pub async fn message_to_all_except_sender(addr: &SocketAddr, msg: &WebsocketMessage)
     {
-        // We want to broadcast the message to everyone except ourselves.
+        
         let state = CLIENTS
             .lock()
             .await;

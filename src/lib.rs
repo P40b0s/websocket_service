@@ -13,6 +13,8 @@ pub use client::Client;
 #[cfg(test)]
 mod test
 {
+    use std::net::SocketAddr;
+
     use logger::debug;
     use crate::message::WebsocketMessage;
     #[cfg(feature = "client")]
@@ -28,15 +30,8 @@ mod test
         Server::start_server("127.0.0.1:3010").await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         Client::start_client("ws://127.0.0.1:3010/").await;
-        let _ = Client::on_receive_message(|msg|
-        {
-            debug!("Клиентом полчено сообщение через канал {}", &msg.command.target);
-        }).await;
-        Server::on_receive_msg(|addr, msg|
-        {
-            debug!("Сервером полчено сообщение от {} через канал {}", addr, &msg.command.target);
-            
-        }).await;
+        Client::on_receive_message(on_client_receive).await;
+        Server::on_receive_message(on_server_receive).await;
         loop
         {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -45,5 +40,16 @@ mod test
             _ = Client::send_message(&cli_wsmsg).await;
             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
         }
+    }
+
+    async fn on_server_receive(addr: SocketAddr, msg: WebsocketMessage)
+    {
+        debug!("Сервером получено сообщение от клиента {} через канал {}", &addr,  &msg.command.target);
+        ()
+    }
+    async fn on_client_receive(msg: WebsocketMessage)
+    {
+        debug!("Клиентом полчено сообщение через канал {}", &msg.command.target);
+        ()
     }
 }
