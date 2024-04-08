@@ -88,7 +88,9 @@ impl Client
         future::select(outgoing, incoming).await;
     }
 
-    pub async fn on_receive_message<F: Send + 'static + Fn(WebsocketMessage) -> Fut, Fut: std::future::Future<Output = ()> + Send>(f: F)
+    //pub async fn on_receive_message<F: Send + 'static + Fn(WebsocketMessage) -> Fut, Fut: std::future::Future<Output = ()> + Send>(f: F)
+    pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(f: F)
+    where F:  Send + 'static + Fn(WebsocketMessage) -> Fut
     {
         RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
         tokio::spawn(async move
