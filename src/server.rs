@@ -14,12 +14,6 @@ static CLIENTS: Lazy<Arc<Mutex<HashMap<SocketAddr, UnboundedSender<Message>>>>> 
 {
     Arc::new(Mutex::new(HashMap::new()))
 });
-///Канал получаемых от клиентов сообщений 
-//static MESSAGE_RECEIVER: Lazy<Mutex<Vec<(SocketAddr, UnboundedReceiver<WebsocketMessage>)>>> = Lazy::new(|| Mutex::new(Vec::new()));
-///Флаг что сообщения из очереди обрабатываются,  
-///Cтавиться автоматически при вызове замыкания обработки сообщений
-//static RECEIVER_WORKER: AtomicBool = AtomicBool::new(false);
-
 
 /// # Examples
 /// ```
@@ -66,11 +60,7 @@ impl Server
             }
         });
     }
-    // async fn add_message_receiver(socket: &SocketAddr, receiver: UnboundedReceiver<WebsocketMessage>)
-    // {
-    //     let mut mr_guard = MESSAGE_RECEIVER.lock().await;
-    //     let _ = mr_guard.push((socket.clone(), receiver));
-    // }
+
     async fn add_message_sender(socket: &SocketAddr, sender: UnboundedSender<Message>)
     {
         let mut guard =   CLIENTS.lock().await;
@@ -91,8 +81,6 @@ impl Server
             {
                 debug!("* {}: {:?}", header, _value);
             }
-            //let headers = response.headers_mut();
-            //headers.append("MyCustomHeader", ":)".parse().unwrap());
             Ok(response)
         };
         let ws_stream = tokio_tungstenite::accept_hdr_async(stream, headers_callback)
@@ -105,11 +93,6 @@ impl Server
         {
             if !msg.is_ping() && !msg.is_pong() && !msg.is_empty() && !msg.is_close()
             {
-                // if let Ok(m) = msg.clone().into_text()
-                // {
-                //     debug!("Сервером получено сообщение: {}", m);
-                // }
-                
                 let msg =  TryInto::<WebsocketMessage>::try_into(&msg);
                 if let Ok(d) = msg
                 {
@@ -117,13 +100,6 @@ impl Server
                     {
                         f(addr.clone(), d).await;
                     });
-                    
-                    //debug!("Сервером получено сообщение: {:?}", d);
-                    // if RECEIVER_WORKER.load(std::sync::atomic::Ordering::SeqCst)
-                    // {
-                    //     let _ = s.unbounded_send(d);
-                    //     debug!("Cообщение добавлено в очередь сообщений {}",s.len());
-                    // }
                 }
                 else
                 {
@@ -143,35 +119,8 @@ impl Server
         let mut guard = CLIENTS.lock().await;
         guard.remove(&addr);
         drop(guard);
-        //let mut mr_guard = MESSAGE_RECEIVER.lock().await;
-        //mr_guard.retain(|r| &r.0 != &addr);
         debug!("Клиент {} отсоединен", &addr);
     }
-
-    ///Если не активировать это замыкание то поступающие от клиента сообщения не будут складываться в канал, ну и обработки сообщений соотвественно не будет
-    /// на случай если клиент не собирается посылать серверу сообщения и обрабатывать их не нужно
-    // pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(f: F)
-    // where F:  Send + 'static + Fn(SocketAddr, WebsocketMessage) -> Fut
-    // {
-    //     RECEIVER_WORKER.store(true, std::sync::atomic::Ordering::SeqCst);
-    //     tokio::spawn(async move
-    //     {
-    //         loop 
-    //         {
-    //             let mut guard = MESSAGE_RECEIVER.lock().await;
-    //             for (addr,  recv) in guard.iter_mut()
-    //             {
-    //                 if let Some(m) = recv.next().await
-    //                 {
-    //                     f(addr.clone(), m).await;
-    //                 }
-    //             }
-    //             //дадим время использовать receiver другому потоку
-    //             drop(guard);
-    //             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
-    //         }
-    //     });
-    // }
     /// Сообщения всем подключеным клиентам
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
@@ -181,6 +130,7 @@ impl Server
         .iter()
         .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
         drop(state);
+        debug!("Получены каналы для отправки веерного сообщения клиентам");
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
@@ -190,6 +140,7 @@ impl Server
                 {
                     error!("{:?}", err);
                 }
+                debug!("Сообщение отправлено в канал {}", recp.len());
             }
         }
         else
