@@ -6,7 +6,7 @@ use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
 use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::pin_mut;
-use futures::{stream::StreamExt, future, TryStreamExt};
+use futures::{future, stream::StreamExt, SinkExt, TryStreamExt};
 use crate::message::WebsocketMessage;
 
 ///Список подключенных клиентов с каналом для оправки им сообщений
@@ -15,7 +15,7 @@ static CLIENTS: Lazy<Arc<Mutex<HashMap<SocketAddr, UnboundedSender<Message>>>>> 
     Arc::new(Mutex::new(HashMap::new()))
 });
 ///Канал получаемых от клиентов сообщений 
-static MESSAGE_RECEIVER: Lazy<Mutex<HashMap<SocketAddr, UnboundedReceiver<WebsocketMessage>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static MESSAGE_RECEIVER: Lazy<Mutex<Vec<(SocketAddr, UnboundedReceiver<WebsocketMessage>)>>> = Lazy::new(|| Mutex::new(Vec::new()));
 ///Флаг что сообщения из очереди обрабатываются,  
 ///Cтавиться автоматически при вызове замыкания обработки сообщений
 static RECEIVER_WORKER: AtomicBool = AtomicBool::new(false);
@@ -68,7 +68,7 @@ impl Server
     async fn add_message_receiver(socket: &SocketAddr, receiver: UnboundedReceiver<WebsocketMessage>)
     {
         let mut mr_guard = MESSAGE_RECEIVER.lock().await;
-        let _ = mr_guard.insert(socket.clone(), receiver);
+        let _ = mr_guard.push((socket.clone(), receiver));
     }
     async fn add_message_sender(socket: &SocketAddr, sender: UnboundedSender<Message>)
     {
@@ -117,7 +117,7 @@ impl Server
                     if RECEIVER_WORKER.load(std::sync::atomic::Ordering::SeqCst)
                     {
                         let _ = s.unbounded_send(d);
-                        //debug!("Cообщение добавлено в очередь сообщений {}",s.len());
+                        debug!("Cообщение добавлено в очередь сообщений {}",s.len());
                     }
                 }
                 else
@@ -136,6 +136,8 @@ impl Server
         pin_mut!(broadcast_incoming, receive_from_others);
         let _ = future::select(broadcast_incoming, receive_from_others).await;
         CLIENTS.lock().await.remove(&addr);
+        let mut mr_guard = MESSAGE_RECEIVER.lock().await;
+        mr_guard.retain(|r| &r.0 != &addr);
         debug!("Клиент {} отсоединен", &addr);
     }
 
@@ -152,14 +154,14 @@ impl Server
                 let mut guard = MESSAGE_RECEIVER.lock().await;
                 for (addr,  recv) in guard.iter_mut()
                 {
-                    if let Ok(m) = recv.try_next()
+                    if let Some(m) = recv.next().await
                     {
-                        if let Some(m) = m
-                        {
-                            f(addr.clone(), m).await;
-                        }
+                        f(addr.clone(), m).await;
                     }
                 }
+                //дадим время использовать receiver другому потоку
+                drop(guard);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await
             }
         });
     }
@@ -167,9 +169,7 @@ impl Server
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
        
-        let state = CLIENTS
-        .lock()
-        .await;
+        let state = CLIENTS.lock().await;
         let receivers = state
         .iter()
         .map(|(_, ws_sink)| ws_sink);
@@ -178,7 +178,10 @@ impl Server
         {
             for recp in receivers
             {
-                recp.unbounded_send(m.clone()).unwrap();
+                if let Err(err) = recp.unbounded_send(m.clone())
+                {
+                    error!("{:?}", err);
+                }
             }
         }
         else
