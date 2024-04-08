@@ -172,7 +172,8 @@ impl Server
         let state = CLIENTS.lock().await;
         let receivers = state
         .iter()
-        .map(|(_, ws_sink)| ws_sink);
+        .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
+        drop(state);
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
@@ -199,7 +200,8 @@ impl Server
             let receivers = state
             .iter()
             .filter(|(peer_addr, _)| peer_addr != &addr)
-            .map(|(_, ws_sink)| ws_sink);
+            .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
+        drop(state);
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
