@@ -43,8 +43,8 @@ impl Server
     pub async fn start_server(host: &str)
     {
         let addr = host.to_string(); 
-        //tokio::spawn(async move
-        //{
+        tokio::spawn(async move
+        {
             debug!("Старт сервера websocket...");
             // Create the event loop and TCP listener we'll accept connections on.
             let listener = tokio::net::TcpListener::bind(&addr).await;
@@ -63,7 +63,7 @@ impl Server
             {
                 logger::error!("Ошибка запуска сервера: {}", listener.unwrap_err().to_string())
             }
-        //});
+        });
     }
     async fn add_message_receiver(socket: &SocketAddr, receiver: UnboundedReceiver<WebsocketMessage>)
     {
