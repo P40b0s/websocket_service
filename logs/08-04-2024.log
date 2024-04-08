@@ -227,3 +227,29 @@
 [08-04-2024 13:05:45]:⚙ DEBUG -> получено сообщение pong true
 [08-04-2024 13:39:49]:⚙ DEBUG -> Старт сервера websocket...
 [08-04-2024 13:39:49]:⚙ DEBUG -> Websocet доступен на : 127.0.0.1:3010
+[08-04-2024 14:37:04]:⚙ DEBUG -> Старт сервера websocket...
+[08-04-2024 14:37:04]:⚙ DEBUG -> Websocet доступен на : 127.0.0.1:3010
+[08-04-2024 14:37:09]:⚙ DEBUG -> Получен новый ws handshake от 127.0.0.1:59236
+[08-04-2024 14:37:09]:⚙ DEBUG -> Путь запроса: /
+[08-04-2024 14:37:09]:⚙ DEBUG -> Хэдеры запроса:
+[08-04-2024 14:37:09]:⚙ DEBUG -> * host: "127.0.0.1:3010"
+[08-04-2024 14:37:09]:⚙ DEBUG -> * connection: "Upgrade"
+[08-04-2024 14:37:09]:⚙ DEBUG -> * upgrade: "websocket"
+[08-04-2024 14:37:09]:⚙ DEBUG -> * sec-websocket-version: "13"
+[08-04-2024 14:37:09]:⚙ DEBUG -> * sec-websocket-key: "56EM8F6tcIHLnovAatf1Xg=="
+[08-04-2024 14:37:09]:⚙ DEBUG -> Server handshake done.
+[08-04-2024 14:37:09]:⚙ DEBUG -> Client handshake done.
+[08-04-2024 14:37:09]:⚙ DEBUG -> Рукопожатие с сервером успешно
+[08-04-2024 14:37:09]:⚙ DEBUG -> * connection: Upgrade
+[08-04-2024 14:37:09]:⚙ DEBUG -> * upgrade: websocket
+[08-04-2024 14:37:09]:⚙ DEBUG -> * sec-websocket-accept: Mr0Ez6Kk7sklSru6b7JQ2a9Htdk=
+[08-04-2024 14:37:14]:⚙ DEBUG -> сообщение от клиента 127.0.0.1:59236 WebsocketMessage { success: true, command: Command { target: "test_client_cmd", method: "test_client_method", args: None, payload: None } }
+[08-04-2024 14:37:14]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:37:19]:⚙ DEBUG -> сообщение от клиента 127.0.0.1:59236 WebsocketMessage { success: true, command: Command { target: "test_client_cmd", method: "test_client_method", args: None, payload: None } }
+[08-04-2024 14:37:19]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:37:24]:⚙ DEBUG -> сообщение от клиента 127.0.0.1:59236 WebsocketMessage { success: true, command: Command { target: "test_client_cmd", method: "test_client_method", args: None, payload: None } }
+[08-04-2024 14:37:24]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:37:29]:⚙ DEBUG -> сообщение от клиента 127.0.0.1:59236 WebsocketMessage { success: true, command: Command { target: "test_client_cmd", method: "test_client_method", args: None, payload: None } }
+[08-04-2024 14:37:29]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:37:34]:⚙ DEBUG -> сообщение от клиента 127.0.0.1:59236 WebsocketMessage { success: true, command: Command { target: "test_client_cmd", method: "test_client_method", args: None, payload: None } }
+[08-04-2024 14:37:34]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd

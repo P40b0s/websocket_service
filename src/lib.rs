@@ -27,7 +27,7 @@ mod test
     pub async fn test_connection()
     {
         logger::StructLogger::initialize_logger();
-        Server::start_server("127.0.0.1:3010").await;
+        Server::start_server("127.0.0.1:3010", receiver).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let client = Client::start_client("ws://127.0.0.1:3010/").await;
         client.on_receive_message(on_client_receive).await;
@@ -40,6 +40,10 @@ mod test
             _ = Client::send_message(&cli_wsmsg).await;
             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
         }
+    }
+    async fn receiver(addr: SocketAddr, wsmsg: WebsocketMessage)
+    {
+        debug!("сообщение от клиента {} {:?}", addr, wsmsg)
     }
 
     async fn on_server_receive(addr: SocketAddr, msg: WebsocketMessage)
