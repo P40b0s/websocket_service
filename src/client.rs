@@ -45,7 +45,6 @@ impl Client
     async fn start<F>(addr: String, f:F)
     where F:  Send + Copy + 'static + Fn(WebsocketMessage)
     {
-        
         let (sender, local_receiver) = unbounded::<Message>();
         let _ = SENDER.set(sender);
         let (ws_stream, resp) = connect_async(&addr).await
@@ -59,11 +58,13 @@ impl Client
         let outgoing = local_receiver.map(Ok).forward(write);
         let incoming = 
         {
+           
             read.try_for_each(|message|
             {
+                debug!("Клиентом получено сообщение  {:?}",&message);
                 if message.is_pong()
                 {
-                    debug!("получено сообщение pong {}",message.is_pong())
+                    debug!("Клиентом получено сообщение pong {}",message.is_pong())
                 }
                 else
                 {
@@ -71,15 +72,10 @@ impl Client
                     if let Ok(m) = msg
                     {
                         f(m)
-                        //debug!("Клиентом получено сообщение: success: {}, command: {}, method: {}", m.success, m.command.target, m.command.method);
-                        //if RECEIVER_FN_ISACTIVE.load(std::sync::atomic::Ordering::SeqCst)
-                        //{
-                            //let _ = local_sender.unbounded_send(m);
-                        //}
                     }
                     else 
                     {
-                        logger::error!("Ошибка десериализации объекта: {}", msg.err().unwrap());
+                        logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
                     }
                 }
                 future::ok(())
@@ -89,25 +85,6 @@ impl Client
         future::select(outgoing, incoming).await;
     }
 
-    //pub async fn on_receive_message<F: Send + 'static + Fn(WebsocketMessage) -> Fut, Fut: std::future::Future<Output = ()> + Send>(f: F)
-    // pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(&self, f: F)
-    // where F:  Send + 'static + Fn(WebsocketMessage) -> Fut
-    // {
-    //     RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
-    //     let receiver = Arc::clone(&self.receiver);
-    //     tokio::spawn(async move
-    //     {
-    //         //if let Some(receiver) = RECEIVER.get()
-    //         //{
-    //             let mut r = receiver.lock().await;
-    //             while let Some(msg) = r.next().await 
-    //             {
-    //                 f(msg).await;
-    //             }
-    //         //}
-            
-    //     });
-    // }
     pub async fn send_message(wsmsg: &WebsocketMessage)
     {
         if let Ok(msg) = wsmsg.try_into()
