@@ -253,3 +253,31 @@
 [08-04-2024 14:37:29]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
 [08-04-2024 14:37:34]:⚙ DEBUG -> сообщение от клиента 127.0.0.1:59236 WebsocketMessage { success: true, command: Command { target: "test_client_cmd", method: "test_client_method", args: None, payload: None } }
 [08-04-2024 14:37:34]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:49:48]:⚙ DEBUG -> Client handshake done.
+[08-04-2024 14:49:48]:⚙ DEBUG -> Рукопожатие с сервером успешно
+[08-04-2024 14:49:48]:⚙ DEBUG -> * connection: Upgrade
+[08-04-2024 14:49:48]:⚙ DEBUG -> * upgrade: websocket
+[08-04-2024 14:49:48]:⚙ DEBUG -> * sec-websocket-accept: SuiGQ7BxMs0vSw+GIFaf0sAsLMk=
+[08-04-2024 14:49:53]:⚙ DEBUG -> получено сообщение pong true
+[08-04-2024 14:49:58]:⚙ DEBUG -> получено сообщение pong true
+[08-04-2024 14:50:03]:⚙ DEBUG -> получено сообщение pong true
+[08-04-2024 14:58:51]:⚙ DEBUG -> Старт сервера websocket...
+[08-04-2024 14:58:51]:⚙ DEBUG -> Websocet доступен на : 127.0.0.1:3010
+[08-04-2024 14:58:56]:⚙ DEBUG -> Получен новый ws handshake от 127.0.0.1:50598
+[08-04-2024 14:58:56]:⚙ DEBUG -> Путь запроса: /
+[08-04-2024 14:58:56]:⚙ DEBUG -> Хэдеры запроса:
+[08-04-2024 14:58:56]:⚙ DEBUG -> * host: "127.0.0.1:3010"
+[08-04-2024 14:58:56]:⚙ DEBUG -> * connection: "Upgrade"
+[08-04-2024 14:58:56]:⚙ DEBUG -> * upgrade: "websocket"
+[08-04-2024 14:58:56]:⚙ DEBUG -> * sec-websocket-version: "13"
+[08-04-2024 14:58:56]:⚙ DEBUG -> * sec-websocket-key: "MbQCun2fp7j3rE6mEWRD0g=="
+[08-04-2024 14:58:56]:⚙ DEBUG -> Server handshake done.
+[08-04-2024 14:58:56]:⚙ DEBUG -> Client handshake done.
+[08-04-2024 14:58:56]:⚙ DEBUG -> Рукопожатие с сервером успешно
+[08-04-2024 14:58:56]:⚙ DEBUG -> * connection: Upgrade
+[08-04-2024 14:58:56]:⚙ DEBUG -> * upgrade: websocket
+[08-04-2024 14:58:56]:⚙ DEBUG -> * sec-websocket-accept: TmIs+VqLrsUyGUCs3EKs1jNcey8=
+[08-04-2024 14:59:01]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:59:01]:⚙ DEBUG -> Сервером получено сообщение от клиента 127.0.0.1:50598 через канал test_client_cmd
+[08-04-2024 14:59:06]:⚙ DEBUG -> Клиентом полчено сообщение через канал test_server_cmd
+[08-04-2024 14:59:06]:⚙ DEBUG -> Сервером получено сообщение от клиента 127.0.0.1:50598 через канал test_client_cmd

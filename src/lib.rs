@@ -27,11 +27,11 @@ mod test
     pub async fn test_connection()
     {
         logger::StructLogger::initialize_logger();
-        Server::start_server("127.0.0.1:3010", receiver).await;
+        Server::start_server("127.0.0.1:3010", on_server_receive).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let client = Client::start_client("ws://127.0.0.1:3010/").await;
-        client.on_receive_message(on_client_receive).await;
-        Server::on_receive_message(on_server_receive).await;
+        Client::start_client("ws://127.0.0.1:3010/", on_client_receive).await;
+        //client.on_receive_message(on_client_receive).await;
+        //Server::on_receive_message(on_server_receive).await;
         loop
         {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -41,17 +41,13 @@ mod test
             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
         }
     }
-    async fn receiver(addr: SocketAddr, wsmsg: WebsocketMessage)
-    {
-        debug!("сообщение от клиента {} {:?}", addr, wsmsg)
-    }
-
+    
     async fn on_server_receive(addr: SocketAddr, msg: WebsocketMessage)
     {
         debug!("Сервером получено сообщение от клиента {} через канал {}", &addr,  &msg.command.target);
         ()
     }
-    async fn on_client_receive(msg: WebsocketMessage)
+    fn on_client_receive(msg: WebsocketMessage)
     {
         debug!("Клиентом полчено сообщение через канал {}", &msg.command.target);
         ()

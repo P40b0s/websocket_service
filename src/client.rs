@@ -9,13 +9,10 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use crate::message::WebsocketMessage;
 
 static SENDER: OnceCell<UnboundedSender<Message>> = OnceCell::new();
-static RECEIVER: OnceCell<Mutex<UnboundedReceiver<WebsocketMessage>>> = OnceCell::new();
-static RECEIVER_FN_ISACTIVE: AtomicBool = AtomicBool::new(false);
+//static RECEIVER: OnceCell<Mutex<UnboundedReceiver<WebsocketMessage>>> = OnceCell::new();
+//static RECEIVER_FN_ISACTIVE: AtomicBool = AtomicBool::new(false);
 
-pub struct Client
-{
-    receiver: Arc<Mutex<UnboundedReceiver<WebsocketMessage>>>
-}
+pub struct Client;
 impl Client
 {
     /// # Examples
@@ -35,22 +32,18 @@ impl Client
     ///     }
     /// }
     /// ```
-    pub async fn start_client(addr: &str) -> Self
+    pub async fn start_client<F>(addr: &str, f:F)
+    where F:  Send + Sync + Copy + 'static + Fn(WebsocketMessage)
     {
         let addr = addr.to_owned();
-        let (mut local_sender, receiver) = unbounded::<WebsocketMessage>();
-        //let _ = RECEIVER.set(Mutex::new(receiver));
         tokio::spawn(async move
         {
-            Self::start(addr, local_sender).await;
+            Self::start(addr, f).await;
         });
-        Self
-        {
-            receiver: Arc::new(Mutex::new(receiver))
-        }
     }
     ///ws://127.0.0.1:3010/
-    async fn start(addr: String, local_sender: UnboundedSender<WebsocketMessage>)
+    async fn start<F>(addr: String, f:F)
+    where F:  Send + Copy + 'static + Fn(WebsocketMessage)
     {
         
         let (sender, local_receiver) = unbounded::<Message>();
@@ -77,12 +70,12 @@ impl Client
                     let msg =  TryInto::<WebsocketMessage>::try_into(&message);
                     if let Ok(m) = msg
                     {
-                    
+                        f(m)
                         //debug!("Клиентом получено сообщение: success: {}, command: {}, method: {}", m.success, m.command.target, m.command.method);
-                        if RECEIVER_FN_ISACTIVE.load(std::sync::atomic::Ordering::SeqCst)
-                        {
-                            let _ = local_sender.unbounded_send(m);
-                        }
+                        //if RECEIVER_FN_ISACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+                        //{
+                            //let _ = local_sender.unbounded_send(m);
+                        //}
                     }
                     else 
                     {
@@ -97,24 +90,24 @@ impl Client
     }
 
     //pub async fn on_receive_message<F: Send + 'static + Fn(WebsocketMessage) -> Fut, Fut: std::future::Future<Output = ()> + Send>(f: F)
-    pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(&self, f: F)
-    where F:  Send + 'static + Fn(WebsocketMessage) -> Fut
-    {
-        RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
-        let receiver = Arc::clone(&self.receiver);
-        tokio::spawn(async move
-        {
-            //if let Some(receiver) = RECEIVER.get()
-            //{
-                let mut r = receiver.lock().await;
-                while let Some(msg) = r.next().await 
-                {
-                    f(msg).await;
-                }
-            //}
+    // pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(&self, f: F)
+    // where F:  Send + 'static + Fn(WebsocketMessage) -> Fut
+    // {
+    //     RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
+    //     let receiver = Arc::clone(&self.receiver);
+    //     tokio::spawn(async move
+    //     {
+    //         //if let Some(receiver) = RECEIVER.get()
+    //         //{
+    //             let mut r = receiver.lock().await;
+    //             while let Some(msg) = r.next().await 
+    //             {
+    //                 f(msg).await;
+    //             }
+    //         //}
             
-        });
-    }
+    //     });
+    // }
     pub async fn send_message(wsmsg: &WebsocketMessage)
     {
         if let Ok(msg) = wsmsg.try_into()
@@ -137,17 +130,24 @@ impl Client
 #[cfg(test)]
 mod test
 {
+    use crate::WebsocketMessage;
+
     use super::Client;
 
     #[tokio::test]
     async fn test_client()
     {
         logger::StructLogger::initialize_logger();
-        super::Client::start_client("ws://127.0.0.1:3010/").await;
+        super::Client::start_client("ws://127.0.0.1:3010/", receiver).await;
         loop 
         {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             let _ = Client::ping().await;
         }
+    }
+
+    fn receiver(ms: WebsocketMessage)
+    {
+        ()
     }
 }

@@ -81,9 +81,7 @@ impl Server
     async fn accept_connection<F, Fut: std::future::Future<Output = ()> + Send>(stream: tokio::net::TcpStream, f:F)
     where F:  Send + Copy + 'static + Fn(SocketAddr, WebsocketMessage) -> Fut
     {
-        let (s, r) = unbounded::<WebsocketMessage>();
         let addr = stream.peer_addr().expect("Соединение должно иметь исходящий ip адрес");
-        //Self::add_message_receiver(&addr, r).await;
         let headers_callback = |req: &Request, mut response: Response| 
         {
             debug!("Получен новый ws handshake от {}", &addr);
