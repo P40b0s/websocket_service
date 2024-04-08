@@ -29,8 +29,8 @@ mod test
         logger::StructLogger::initialize_logger();
         Server::start_server("127.0.0.1:3010").await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        Client::start_client("ws://127.0.0.1:3010/").await;
-        Client::on_receive_message(on_client_receive).await;
+        let client = Client::start_client("ws://127.0.0.1:3010/").await;
+        client.on_receive_message(on_client_receive).await;
         Server::on_receive_message(on_server_receive).await;
         loop
         {

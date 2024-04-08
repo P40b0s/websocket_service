@@ -57,7 +57,7 @@ impl Client
         let _ = SENDER.set(sender);
         let (ws_stream, resp) = connect_async(&addr).await
         .expect("Ошибка соединения с сервером");
-        println!("Рукопожатие с сервером успешно");
+        debug!("Рукопожатие с сервером успешно");
         for h in resp.headers()
         {
             debug!("* {}: {}", h.0.as_str(), h.1.to_str().unwrap());
