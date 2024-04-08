@@ -1,6 +1,6 @@
 use logger::{debug, error};
 use once_cell::sync::Lazy;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio_tungstenite::tungstenite::{handshake::server::{Request, Response}, Message};
 use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
 use std::net::SocketAddr;
@@ -10,9 +10,9 @@ use futures::{future, stream::StreamExt, SinkExt, TryStreamExt};
 use crate::message::WebsocketMessage;
 
 ///Список подключенных клиентов с каналом для оправки им сообщений
-static CLIENTS: Lazy<Arc<Mutex<HashMap<SocketAddr, UnboundedSender<Message>>>>> = Lazy::new(|| 
+static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>> = Lazy::new(|| 
 {
-    Arc::new(Mutex::new(HashMap::new()))
+    Arc::new(RwLock::new(HashMap::new()))
 });
 
 /// # Examples
@@ -63,7 +63,7 @@ impl Server
 
     async fn add_message_sender(socket: &SocketAddr, sender: UnboundedSender<Message>)
     {
-        let mut guard =   CLIENTS.lock().await;
+        let mut guard =   CLIENTS.write().await;
         guard.insert(socket.clone(), sender);
         drop(guard);
     }
@@ -116,7 +116,7 @@ impl Server
         let receive_from_others = receiver.map(Ok).forward(outgoing);
         pin_mut!(broadcast_incoming, receive_from_others);
         let _ = future::select(broadcast_incoming, receive_from_others).await;
-        let mut guard = CLIENTS.lock().await;
+        let mut guard = CLIENTS.write().await;
         guard.remove(&addr);
         drop(guard);
         debug!("Клиент {} отсоединен", &addr);
@@ -125,7 +125,7 @@ impl Server
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
        
-        let state = CLIENTS.lock().await;
+        let state = CLIENTS.read().await;
         let receivers = state
         .iter()
         .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
@@ -153,7 +153,7 @@ impl Server
     {
         
         let state = CLIENTS
-            .lock()
+            .read()
             .await;
             let receivers = state
             .iter()
@@ -179,7 +179,7 @@ impl Server
         let msg =  TryInto::<Message>::try_into(message);
         if let Ok(m) = msg
         {
-            if let Some(sender) = CLIENTS.lock().await.get(addr) 
+            if let Some(sender) = CLIENTS.read().await.get(addr) 
             {
                 sender.unbounded_send(m).unwrap();
             }
