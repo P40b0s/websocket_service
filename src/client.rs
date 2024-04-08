@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicBool;
+use std::sync::{atomic::AtomicBool, Arc};
 use futures::SinkExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
@@ -12,7 +12,10 @@ static SENDER: OnceCell<UnboundedSender<Message>> = OnceCell::new();
 static RECEIVER: OnceCell<Mutex<UnboundedReceiver<WebsocketMessage>>> = OnceCell::new();
 static RECEIVER_FN_ISACTIVE: AtomicBool = AtomicBool::new(false);
 
-pub struct Client{}
+pub struct Client
+{
+    receiver: Arc<Mutex<UnboundedReceiver<WebsocketMessage>>>
+}
 impl Client
 {
     /// # Examples
@@ -32,21 +35,26 @@ impl Client
     ///     }
     /// }
     /// ```
-    pub async fn start_client(addr: &str)
+    pub async fn start_client(addr: &str) -> Self
     {
         let addr = addr.to_owned();
+        let (mut local_sender, receiver) = unbounded::<WebsocketMessage>();
+        //let _ = RECEIVER.set(Mutex::new(receiver));
         tokio::spawn(async move
         {
-            Self::start(addr).await;
+            Self::start(addr, local_sender).await;
         });
+        Self
+        {
+            receiver: Arc::new(Mutex::new(receiver))
+        }
     }
     ///ws://127.0.0.1:3010/
-    async fn start(addr: String)
+    async fn start(addr: String, local_sender: UnboundedSender<WebsocketMessage>)
     {
+        
         let (sender, local_receiver) = unbounded::<Message>();
-        let (mut local_sender, receiver) = unbounded::<WebsocketMessage>();
         let _ = SENDER.set(sender);
-        let _ = RECEIVER.set(Mutex::new(receiver));
         let (ws_stream, resp) = connect_async(&addr).await
         .expect("Ошибка соединения с сервером");
         println!("Рукопожатие с сервером успешно");
@@ -89,18 +97,22 @@ impl Client
     }
 
     //pub async fn on_receive_message<F: Send + 'static + Fn(WebsocketMessage) -> Fut, Fut: std::future::Future<Output = ()> + Send>(f: F)
-    pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(f: F)
+    pub async fn on_receive_message<F, Fut: std::future::Future<Output = ()> + Send>(&self, f: F)
     where F:  Send + 'static + Fn(WebsocketMessage) -> Fut
     {
         RECEIVER_FN_ISACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
+        let receiver = Arc::clone(&self.receiver);
         tokio::spawn(async move
         {
-            let receiver = RECEIVER.get().unwrap();
-            let mut r = receiver.lock().await;
-            while let Some(msg) = r.next().await 
-            {
-                f(msg).await;
-            }
+            //if let Some(receiver) = RECEIVER.get()
+            //{
+                let mut r = receiver.lock().await;
+                while let Some(msg) = r.next().await 
+                {
+                    f(msg).await;
+                }
+            //}
+            
         });
     }
     pub async fn send_message(wsmsg: &WebsocketMessage)
