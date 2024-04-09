@@ -18,13 +18,12 @@ static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>>
 
 /// # Examples
 /// ```
-///Server::start_server("127.0.0.1:3010").await;
-///std::thread::sleep(Duration::from_secs(5));
-///Server::on_receive_msg(|addr, msg|
+///Server::start_server("127.0.0.1:3010", on_server_receive).await;
+///async fn on_server_receive(addr: SocketAddr, msg: WebsocketMessage)
 ///{
-///    debug!("Сервером полчено сообщение от {} через канал {}", addr, &msg.command.target);
-///    
-///}).await;
+///    debug!("Сервером получено сообщение от клиента {} через канал {}", &addr,  &msg.command.target);
+///    ()
+///}
 ///loop
 ///{
 ///    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -125,10 +124,10 @@ impl Server
             }
             future::ok(())
         });
-        let tt = tokio::spawn(receiver.map(Ok).forward(outgoing));
-        //let send_to_ws = receiver.map(Ok).forward(outgoing);
+        //let tt = tokio::spawn(receiver.map(Ok).forward(outgoing));
+        let send_to_ws = receiver.map(Ok).forward(outgoing);
         pin_mut!(from_ws);
-        let _ = future::select(from_ws, tt).await;
+        let _ = future::select(from_ws, send_to_ws).await;
         let mut guard = CLIENTS.write().await;
         guard.remove(&addr);
         drop(guard);
@@ -138,23 +137,20 @@ impl Server
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
         let state = CLIENTS.read().await;
-        // let receivers = state
-        // .iter()
-        // .map(|(_, ws_sink)| ws_sink);
-        debug!("Отправка сообщений {} клиентам", state.len());
+        //debug!("Отправка сообщений {} клиентам", state.len());
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
-            for (addr, sender) in state.iter()
+            for (_, sender) in state.iter()
             {
                 if let Err(err) = sender.unbounded_send(m.clone())
                 {
                     error!("{:?}", err);
                 }
-                else 
-                {
-                    info!("Сообщение отправлено {}, сообщений в канале: {}", addr, sender.len());
-                }
+                //else 
+                //{
+                //    debug!("Сообщение отправлено {}, сообщений в канале: {}", addr, sender.len());
+                //}
             }
         }
         else
@@ -163,22 +159,23 @@ impl Server
         }
     }
     ///Сообщения всем подключеным клиентам кроме того что передан параметром addr
-    pub async fn message_to_all_except_sender(addr: &SocketAddr, msg: &WebsocketMessage)
+    pub async fn message_to_all_except_sender(sender_addr: &SocketAddr, msg: &WebsocketMessage)
     {
         let state = CLIENTS
             .read()
             .await;
-        let receivers = state
-            .iter()
-            .filter(|(peer_addr, _)| peer_addr != &addr)
-            .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
-        drop(state);
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
-            for recp in receivers
+            for (addr, sender) in state.iter()
             {
-                recp.unbounded_send(m.clone()).unwrap();
+                if sender_addr != addr
+                {
+                    if let Err(err) = sender.unbounded_send(m.clone())
+                    {
+                        error!("{:?}", err);
+                    }
+                }
             }
         }
         else
@@ -186,12 +183,12 @@ impl Server
             logger::error!("Ошибка массовой рассылки сообщения {:?}", &msg.unwrap_err().to_string());
         }
     }
-    pub async fn send(message: &WebsocketMessage, addr: &SocketAddr)
+    pub async fn send(message: &WebsocketMessage, target_addr: &SocketAddr)
     {
         let msg =  TryInto::<Message>::try_into(message);
         if let Ok(m) = msg
         {
-            if let Some(sender) = CLIENTS.read().await.get(addr)
+            if let Some(sender) = CLIENTS.read().await.get(target_addr)
             {
                 sender.unbounded_send(m).unwrap();
             }

@@ -19,11 +19,12 @@ impl Client
     /// ```
     /// async run_client()
     /// {
-    ///     Client::start_client("ws://127.0.0.1:3010/").await;
-    ///     let _ = Client::on_receive_message(|msg|
+    ///     Client::start_client("ws://127.0.0.1:3010/", on_client_receive).await;
+    ///     fn on_client_receive(msg: WebsocketMessage)
     ///     {
-    ///         println!("Клиентом полчено сообщение через канал {}", &msg.command.target);
-    ///     }).await;
+    ///         debug!("Клиентом1 полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
+    ///         ()
+    ///     }
     ///     loop
     ///     {
     ///         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -64,18 +65,18 @@ impl Client
             {
                 if let Ok(message) = message
                 {
-                    // if message.is_binary()
-                    // {
-                    //     let msg =  TryInto::<WebsocketMessage>::try_into(&message);
-                    //     if let Ok(m) = msg
-                    //     {
-                    //         f(m)
-                    //     }
-                    //     else 
-                    //     {
-                    //         logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
-                    //     }
-                    // }
+                    if message.is_binary()
+                    {
+                        let msg =  TryInto::<WebsocketMessage>::try_into(&message);
+                        if let Ok(m) = msg
+                        {
+                            f(m)
+                        }
+                        else 
+                        {
+                            logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
+                        }
+                    }
                     logger::info!("получено сообщение от сервера {:?}", message);
                 }
                 else
