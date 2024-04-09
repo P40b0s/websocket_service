@@ -15,6 +15,7 @@ static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>>
     Arc::new(RwLock::new(HashMap::new()))
 });
 
+
 /// # Examples
 /// ```
 ///Server::start_server("127.0.0.1:3010").await;
@@ -89,8 +90,8 @@ impl Server
         let (sender, receiver) = unbounded();
         Self::add_message_sender(&addr, sender).await;
         let (outgoing, incoming) = ws_stream.split();
-        let receive_from_others = receiver.map(Ok).forward(outgoing);
-        let broadcast_incoming = incoming.try_for_each(|msg| 
+        let send_to_ws = receiver.map(Ok).forward(outgoing);
+        let from_ws = incoming.try_for_each(|msg| 
         {
             if !msg.is_ping() && !msg.is_pong() && !msg.is_empty() && !msg.is_close()
             {
@@ -114,9 +115,8 @@ impl Server
 
             future::ok(())
         });
-        
-        pin_mut!(broadcast_incoming, receive_from_others);
-        let _ = future::select(broadcast_incoming, receive_from_others).await;
+        pin_mut!(from_ws, send_to_ws);
+        let _ = future::select(from_ws, send_to_ws).await;
         let mut guard = CLIENTS.write().await;
         guard.remove(&addr);
         drop(guard);
@@ -143,7 +143,6 @@ impl Server
                 {
                     info!("Сообщение отправлено {}, сообщений в канале: {}", addr, sender.len());
                 }
-                
             }
         }
         else

@@ -28,3 +28,4 @@ futures-util = { version = "0.3.30", default-features = false, features = ["sink
 flatbuffers = "23.5.26"
 flexbuffers = "2.0.0"
 anyhow="1.0.81"
+tungstenite="*"

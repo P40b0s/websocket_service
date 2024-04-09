@@ -64,18 +64,19 @@ impl Client
             {
                 if let Ok(message) = message
                 {
-                    if message.is_binary()
-                    {
-                        let msg =  TryInto::<WebsocketMessage>::try_into(&message);
-                        if let Ok(m) = msg
-                        {
-                            f(m)
-                        }
-                        else 
-                        {
-                            logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
-                        }
-                    }
+                    // if message.is_binary()
+                    // {
+                    //     let msg =  TryInto::<WebsocketMessage>::try_into(&message);
+                    //     if let Ok(m) = msg
+                    //     {
+                    //         f(m)
+                    //     }
+                    //     else 
+                    //     {
+                    //         logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
+                    //     }
+                    // }
+                    logger::info!("получено сообщение от сервера {:?}", message);
                 }
                 else
                 {
@@ -85,91 +86,6 @@ impl Client
         };
         pin_mut!(send_to_ws, from_ws);
         future::select(send_to_ws, from_ws).await;
-
-        // loop 
-        // {
-        //     tokio::select! 
-        //     {
-        //         msg = read.next() => 
-        //         {
-        //             match msg 
-        //             {
-        //                 Some(msg) => 
-        //                 {
-        //                     if let Ok(msg) = msg
-        //                     {
-        //                         if msg.is_binary() 
-        //                         {
-        //                             //sender.send(msg).await;
-        //                             let msg =  TryInto::<WebsocketMessage>::try_into(&msg);
-        //                             if let Ok(m) = msg
-        //                             {
-        //                                 f(m)
-        //                             }
-        //                             else 
-        //                             {
-        //                                 logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
-        //                             }
-        //                         } 
-        //                         else if msg.is_close() 
-        //                         {
-        //                             break;
-        //                         }
-        //                         else
-        //                         {
-        //                             break;
-        //                         }
-        //                     }
-        //                     else
-        //                     {
-        //                         error!("{}", msg.err().unwrap().to_string());
-        //                         break;
-        //                     }
-        //                 }
-        //                 None => break,
-        //             }
-        //         }
-        //         send = write..next() => 
-        //         {
-        //             match send
-        //             {
-        //                 Some(send) => 
-        //                 {
-        //                     let _ = write.send(send).await;
-        //                 }
-        //                 None => break,
-        //             }
-        //         }
-        //     }
-        // }
-
-        // let outgoing = local_receiver.map(Ok).forward(write);
-        // let incoming = 
-        // {
-        //     read.try_for_each(|message|
-        //     {
-        //         debug!("Клиентом получено сообщение  {:?}",&message);
-        //         if message.is_pong()
-        //         {
-        //             debug!("Клиентом получено сообщение pong {}",message.is_pong())
-        //         }
-        //         else
-        //         {
-        //             let msg =  TryInto::<WebsocketMessage>::try_into(&message);
-        //             if let Ok(m) = msg
-        //             {
-        //                 f(m)
-        //             }
-        //             else 
-        //             {
-        //                 logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
-        //             }
-        //         }
-        //         future::ok(())
-        //     })
-        // };
-        // pin_mut!(outgoing, incoming);
-        // future::select(outgoing, incoming).await;
     }
 
     pub async fn send_message(wsmsg: &WebsocketMessage)
@@ -195,9 +111,7 @@ impl Client
 mod test
 {
     use logger::debug;
-
     use crate::WebsocketMessage;
-
     use super::Client;
 
     #[tokio::test]
@@ -211,7 +125,6 @@ mod test
             let _ = Client::ping().await;
         }
     }
-
     fn receiver(ms: WebsocketMessage)
     {
         debug!("клиенту поступило новое сообщение {:?}", ms);
