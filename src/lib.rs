@@ -35,7 +35,10 @@ mod test
         logger::StructLogger::initialize_logger();
         Server::start_server("127.0.0.1:3010", on_server_receive).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        Client::start_client("ws://127.0.0.1:3010/", on_client_receive).await;
+        Client::start_client("ws://127.0.0.1:3010/", on_client_receive1).await;
+        Client::start_client("ws://127.0.0.1:3010/", on_client_receive2).await;
+        Client::start_client("ws://127.0.0.1:3010/", on_client_receive3).await;
+        Client::start_client("ws://127.0.0.1:3010/", on_client_receive4).await;
         //client.on_receive_message(on_client_receive).await;
         //Server::on_receive_message(on_server_receive).await;
         loop
@@ -45,6 +48,11 @@ mod test
             let srv_wsmsg: WebsocketMessage = "test_server_cmd:test_server_method".into();
             let srv_wsmsg2: WebsocketMessage = WebsocketMessage::new_with_flex_serialize("with_payload1", "test", Some(&TestPayload{name: "TEST".to_owned()}));
             _ = Client::send_message(&cli_wsmsg).await;
+            tokio::spawn(async 
+            {
+                let srv_wsmsg3: WebsocketMessage = WebsocketMessage::new_with_flex_serialize("from_spawned_task", "test", Some(&TestPayload{name: "SPAWN".to_owned()}));
+                _ = Server::broadcast_message_to_all(&srv_wsmsg3).await;
+            });
             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
             _ = Server::broadcast_message_to_all(&srv_wsmsg2).await;
         }
@@ -55,9 +63,24 @@ mod test
         debug!("Сервером получено сообщение от клиента {} через канал {}", &addr,  &msg.command.target);
         ()
     }
-    fn on_client_receive(msg: WebsocketMessage)
+    fn on_client_receive1(msg: WebsocketMessage)
     {
-        debug!("Клиентом полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
+        debug!("Клиентом1 полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
+        ()
+    }
+    fn on_client_receive2(msg: WebsocketMessage)
+    {
+        debug!("Клиентом2 полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
+        ()
+    }
+    fn on_client_receive3(msg: WebsocketMessage)
+    {
+        debug!("Клиентом3 полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
+        ()
+    }
+    fn on_client_receive4(msg: WebsocketMessage)
+    {
+        debug!("Клиентом4 полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
         ()
     }
 }

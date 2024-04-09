@@ -6,7 +6,7 @@ use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
 use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::pin_mut;
-use futures::{future, stream::StreamExt, SinkExt, TryStreamExt};
+use futures::{future, stream::{select_all, StreamExt}, SinkExt, TryStreamExt};
 use crate::message::WebsocketMessage;
 
 ///Список подключенных клиентов с каналом для оправки им сообщений
@@ -37,7 +37,7 @@ impl Server
     pub async fn start_server<F, Fut: std::future::Future<Output = ()> + Send>(host: &str, f: F)
     where F:  Send + Sync+ 'static + Copy + Fn(SocketAddr, WebsocketMessage) -> Fut
     {
-        let addr = host.to_string(); 
+        let addr = host.to_string();
         tokio::spawn(async move
         {
             debug!("Старт сервера websocket...");
@@ -124,23 +124,21 @@ impl Server
     /// Сообщения всем подключеным клиентам
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
-       
         let state = CLIENTS.read().await;
         let receivers = state
         .iter()
-        .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
-        drop(state);
-        debug!("Получены каналы для отправки веерного сообщения клиентам");
+        .map(|(_, ws_sink)| ws_sink);
+        debug!("Отправка веерного сообщения клиентам");
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
-            for recp in receivers
+            for recv in receivers
             {
-                if let Err(err) = recp.unbounded_send(m.clone())
+                if let Err(err) = recv.unbounded_send(m.clone())
                 {
                     error!("{:?}", err);
                 }
-                debug!("Сообщение отправлено в канал {}", recp.len());
+                debug!("Сообщение отправлено в канал {}", recv.len());
             }
         }
         else

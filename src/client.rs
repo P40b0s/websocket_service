@@ -2,7 +2,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use futures::SinkExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
-use logger::{debug, error};
+use logger::{backtrace, debug, error};
 use once_cell::sync::OnceCell;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -46,7 +46,7 @@ impl Client
     where F:  Send + Copy + 'static + Fn(WebsocketMessage)
     {
         let (sender, local_receiver) = unbounded::<Message>();
-        let _ = SENDER.set(sender);
+        let _ = SENDER.set(sender.clone());
         let (ws_stream, resp) = connect_async(&addr).await
         .expect("Ошибка соединения с сервером");
         debug!("Рукопожатие с сервером успешно");
@@ -55,34 +55,121 @@ impl Client
             debug!("* {}: {}", h.0.as_str(), h.1.to_str().unwrap());
         }
         let (write, read) = ws_stream.split();
-        let outgoing = local_receiver.map(Ok).forward(write);
-        let incoming = 
+        //сообщения полученные по каналу local_receiver'ом форвардятся прямо в вебсокет
+        let send_to_ws = local_receiver.map(Ok).forward(write);
+        //для каждого входяшего сообщения по вебсокет производим обработку
+        let from_ws = 
         {
-           
-            read.try_for_each(|message|
+            read.for_each(|message| async 
             {
-                debug!("Клиентом получено сообщение  {:?}",&message);
-                if message.is_pong()
+                if let Ok(message) = message
                 {
-                    debug!("Клиентом получено сообщение pong {}",message.is_pong())
+                    if message.is_binary()
+                    {
+                        let msg =  TryInto::<WebsocketMessage>::try_into(&message);
+                        if let Ok(m) = msg
+                        {
+                            f(m)
+                        }
+                        else 
+                        {
+                            logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
+                        }
+                    }
                 }
                 else
                 {
-                    let msg =  TryInto::<WebsocketMessage>::try_into(&message);
-                    if let Ok(m) = msg
-                    {
-                        f(m)
-                    }
-                    else 
-                    {
-                        logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
-                    }
+                    logger::error!("Ошибка чтения сообщения! {} -> {}", message.err().unwrap().to_string(), backtrace!());
                 }
-                future::ok(())
             })
         };
-        pin_mut!(outgoing, incoming);
-        future::select(outgoing, incoming).await;
+        pin_mut!(send_to_ws, from_ws);
+        future::select(send_to_ws, from_ws).await;
+
+        // loop 
+        // {
+        //     tokio::select! 
+        //     {
+        //         msg = read.next() => 
+        //         {
+        //             match msg 
+        //             {
+        //                 Some(msg) => 
+        //                 {
+        //                     if let Ok(msg) = msg
+        //                     {
+        //                         if msg.is_binary() 
+        //                         {
+        //                             //sender.send(msg).await;
+        //                             let msg =  TryInto::<WebsocketMessage>::try_into(&msg);
+        //                             if let Ok(m) = msg
+        //                             {
+        //                                 f(m)
+        //                             }
+        //                             else 
+        //                             {
+        //                                 logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
+        //                             }
+        //                         } 
+        //                         else if msg.is_close() 
+        //                         {
+        //                             break;
+        //                         }
+        //                         else
+        //                         {
+        //                             break;
+        //                         }
+        //                     }
+        //                     else
+        //                     {
+        //                         error!("{}", msg.err().unwrap().to_string());
+        //                         break;
+        //                     }
+        //                 }
+        //                 None => break,
+        //             }
+        //         }
+        //         send = write..next() => 
+        //         {
+        //             match send
+        //             {
+        //                 Some(send) => 
+        //                 {
+        //                     let _ = write.send(send).await;
+        //                 }
+        //                 None => break,
+        //             }
+        //         }
+        //     }
+        // }
+
+        // let outgoing = local_receiver.map(Ok).forward(write);
+        // let incoming = 
+        // {
+        //     read.try_for_each(|message|
+        //     {
+        //         debug!("Клиентом получено сообщение  {:?}",&message);
+        //         if message.is_pong()
+        //         {
+        //             debug!("Клиентом получено сообщение pong {}",message.is_pong())
+        //         }
+        //         else
+        //         {
+        //             let msg =  TryInto::<WebsocketMessage>::try_into(&message);
+        //             if let Ok(m) = msg
+        //             {
+        //                 f(m)
+        //             }
+        //             else 
+        //             {
+        //                 logger::error!("Ошибка десериализации объекта на клиенте: {}", msg.err().unwrap());
+        //             }
+        //         }
+        //         future::ok(())
+        //     })
+        // };
+        // pin_mut!(outgoing, incoming);
+        // future::select(outgoing, incoming).await;
     }
 
     pub async fn send_message(wsmsg: &WebsocketMessage)
@@ -107,6 +194,8 @@ impl Client
 #[cfg(test)]
 mod test
 {
+    use logger::debug;
+
     use crate::WebsocketMessage;
 
     use super::Client;
@@ -125,6 +214,6 @@ mod test
 
     fn receiver(ms: WebsocketMessage)
     {
-        ()
+        debug!("клиенту поступило новое сообщение {:?}", ms);
     }
 }
