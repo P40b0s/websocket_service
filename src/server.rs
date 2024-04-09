@@ -6,7 +6,7 @@ use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
 use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::pin_mut;
-use futures::{future, stream::{select_all, StreamExt}, SinkExt, TryStreamExt};
+use futures::{future::{self, Either}, stream::{select_all, StreamExt}, FutureExt, SinkExt, TryFutureExt, TryStreamExt};
 use crate::message::WebsocketMessage;
 
 ///Список подключенных клиентов с каналом для оправки им сообщений
@@ -62,35 +62,36 @@ impl Server
         });
     }
 
-    async fn add_message_sender(socket: &SocketAddr, sender: UnboundedSender<Message>)
+    async fn add_message_sender(socket: &SocketAddr) -> UnboundedReceiver<Message>
     {
+        let (sender, receiver) = unbounded();
         let mut guard =   CLIENTS.write().await;
         guard.insert(socket.clone(), sender);
         drop(guard);
+        receiver
     }
 
     async fn accept_connection<F, Fut: std::future::Future<Output = ()> + Send>(stream: tokio::net::TcpStream, f:F)
     where F:  Send + Copy + 'static + Fn(SocketAddr, WebsocketMessage) -> Fut
     {
         let addr = stream.peer_addr().expect("Соединение должно иметь исходящий ip адрес");
-        let headers_callback = |req: &Request, mut response: Response| 
-        {
-            debug!("Получен новый ws handshake от {}", &addr);
-            debug!("Путь запроса: {}", req.uri().path());
-            debug!("Хэдеры запроса:");
-            for (ref header, _value) in req.headers() 
-            {
-                debug!("* {}: {:?}", header, _value);
-            }
-            Ok(response)
-        };
-        let ws_stream = tokio_tungstenite::accept_hdr_async(stream, headers_callback)
+        // let headers_callback = |req: &Request, mut response: Response| 
+        // {
+        //     debug!("Получен новый ws handshake от {}", &addr);
+        //     debug!("Путь запроса: {}", req.uri().path());
+        //     debug!("Хэдеры запроса:");
+        //     for (ref header, _value) in req.headers() 
+        //     {
+        //         debug!("* {}: {:?}", header, _value);
+        //     }
+        //     Ok(response)
+        // };
+        let ws_stream = tokio_tungstenite::accept_async(stream)
             .await
             .expect("Ошибка handsnake при извлечении данных из websocket");
-        let (sender, receiver) = unbounded();
-        Self::add_message_sender(&addr, sender).await;
+        let receiver = Self::add_message_sender(&addr).await;
         let (outgoing, incoming) = ws_stream.split();
-        let send_to_ws = receiver.map(Ok).forward(outgoing);
+       
         let from_ws = incoming.try_for_each(|msg| 
         {
             if !msg.is_ping() && !msg.is_pong() && !msg.is_empty() && !msg.is_close()
@@ -110,13 +111,24 @@ impl Server
             }
             else if msg.is_ping()
             {
-                debug!("Сервером получено сообщение ping");
+                debug!("Сервером получено сообщение ping {}", &addr);
             }
-
+            else if msg.is_close()
+            {
+                tokio::task::spawn(async move
+                {
+                    debug!("Сервером получено сообщение is_close {}", &addr);
+                    let mut guard = CLIENTS.write().await;
+                    guard.remove(&addr.clone());
+                    drop(guard);
+                });
+            }
             future::ok(())
         });
-        pin_mut!(from_ws, send_to_ws);
-        let _ = future::select(from_ws, send_to_ws).await;
+        let tt = tokio::spawn(receiver.map(Ok).forward(outgoing));
+        //let send_to_ws = receiver.map(Ok).forward(outgoing);
+        pin_mut!(from_ws);
+        let _ = future::select(from_ws, tt).await;
         let mut guard = CLIENTS.write().await;
         guard.remove(&addr);
         drop(guard);

@@ -5,6 +5,7 @@ mod client;
 mod message;
 mod sync_client;
 mod sync_server;
+mod tokio_server;
 pub use message::{WebsocketMessage, Command};
 #[cfg(feature = "server")]
 pub use server::Server;
