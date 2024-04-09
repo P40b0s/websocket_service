@@ -1,4 +1,4 @@
-use logger::{debug, error};
+use logger::{debug, error, info};
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock;
 use tokio_tungstenite::tungstenite::{handshake::server::{Request, Response}, Message};
@@ -89,6 +89,7 @@ impl Server
         let (sender, receiver) = unbounded();
         Self::add_message_sender(&addr, sender).await;
         let (outgoing, incoming) = ws_stream.split();
+        let receive_from_others = receiver.map(Ok).forward(outgoing);
         let broadcast_incoming = incoming.try_for_each(|msg| 
         {
             if !msg.is_ping() && !msg.is_pong() && !msg.is_empty() && !msg.is_close()
@@ -113,7 +114,7 @@ impl Server
 
             future::ok(())
         });
-        let receive_from_others = receiver.map(Ok).forward(outgoing);
+        
         pin_mut!(broadcast_incoming, receive_from_others);
         let _ = future::select(broadcast_incoming, receive_from_others).await;
         let mut guard = CLIENTS.write().await;
@@ -125,20 +126,24 @@ impl Server
     pub async fn broadcast_message_to_all(msg: &WebsocketMessage)
     {
         let state = CLIENTS.read().await;
-        let receivers = state
-        .iter()
-        .map(|(_, ws_sink)| ws_sink);
-        debug!("Отправка веерного сообщения клиентам");
+        // let receivers = state
+        // .iter()
+        // .map(|(_, ws_sink)| ws_sink);
+        debug!("Отправка сообщений {} клиентам", state.len());
         let msg =  TryInto::<Message>::try_into(msg);
         if let Ok(m) = msg
         {
-            for recv in receivers
+            for (addr, sender) in state.iter()
             {
-                if let Err(err) = recv.unbounded_send(m.clone())
+                if let Err(err) = sender.unbounded_send(m.clone())
                 {
                     error!("{:?}", err);
                 }
-                debug!("Сообщение отправлено в канал {}", recv.len());
+                else 
+                {
+                    info!("Сообщение отправлено {}, сообщений в канале: {}", addr, sender.len());
+                }
+                
             }
         }
         else
@@ -149,11 +154,10 @@ impl Server
     ///Сообщения всем подключеным клиентам кроме того что передан параметром addr
     pub async fn message_to_all_except_sender(addr: &SocketAddr, msg: &WebsocketMessage)
     {
-        
         let state = CLIENTS
             .read()
             .await;
-            let receivers = state
+        let receivers = state
             .iter()
             .filter(|(peer_addr, _)| peer_addr != &addr)
             .map(|(_, ws_sink)| ws_sink.clone()).collect::<Vec<UnboundedSender<Message>>>();
@@ -173,11 +177,10 @@ impl Server
     }
     pub async fn send(message: &WebsocketMessage, addr: &SocketAddr)
     {
-       
         let msg =  TryInto::<Message>::try_into(message);
         if let Ok(m) = msg
         {
-            if let Some(sender) = CLIENTS.read().await.get(addr) 
+            if let Some(sender) = CLIENTS.read().await.get(addr)
             {
                 sender.unbounded_send(m).unwrap();
             }

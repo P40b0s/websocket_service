@@ -544,3 +544,15 @@
 [09-04-2024 09:47:56]:⚙ DEBUG -> Сервером получено сообщение от клиента 127.0.0.1:34968 через канал test_client_cmd
 [09-04-2024 09:56:44]:⚙ DEBUG -> Старт сервера websocket...
 [09-04-2024 09:56:44]:⚙ DEBUG -> Websocet доступен на : 127.0.0.1:3010
+[09-04-2024 10:07:27]:⚙ DEBUG -> Client handshake done.
+[09-04-2024 10:07:27]:⚙ DEBUG -> Рукопожатие с сервером успешно
+[09-04-2024 10:07:27]:⚙ DEBUG -> * connection: Upgrade
+[09-04-2024 10:07:27]:⚙ DEBUG -> * upgrade: websocket
+[09-04-2024 10:07:27]:⚙ DEBUG -> * sec-websocket-accept: YoxN5Rkmyf896yBZd3CBs5/4L5Q=
+[09-04-2024 10:07:32]:⚙ DEBUG -> клиенту поступило новое сообщение WebsocketMessage { success: true, command: Command { target: "тест от сервера", method: "ping", args: None, payload: None } }
+[09-04-2024 10:07:47]:⚙ DEBUG -> клиенту поступило новое сообщение WebsocketMessage { success: true, command: Command { target: "тест от сервера", method: "ping", args: None, payload: None } }
+[09-04-2024 10:08:02]:⚙ DEBUG -> клиенту поступило новое сообщение WebsocketMessage { success: true, command: Command { target: "тест от сервера", method: "ping", args: None, payload: None } }
+[09-04-2024 10:08:17]:⚙ DEBUG -> клиенту поступило новое сообщение WebsocketMessage { success: true, command: Command { target: "тест от сервера", method: "ping", args: None, payload: None } }
+[09-04-2024 10:08:32]:⚙ DEBUG -> клиенту поступило новое сообщение WebsocketMessage { success: true, command: Command { target: "тест от сервера", method: "ping", args: None, payload: None } }
+[09-04-2024 10:08:53]:⚙ DEBUG -> клиенту поступило новое сообщение WebsocketMessage { success: true, command: Command { target: "тест от сервера", method: "ping", args: None, payload: None } }
+[09-04-2024 10:12:43]:❌ Ошибка -> Ошибка чтения сообщения! IO error: Connection reset by peer (os error 104) -> 🔍[src/client.rs/{{closure}}():82]
