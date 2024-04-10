@@ -6,6 +6,8 @@ mod message;
 mod sync_client;
 mod sync_server;
 mod tokio_server;
+mod retry;
+pub use retry::retry;
 pub use message::{WebsocketMessage, Command};
 #[cfg(feature = "server")]
 pub use server::Server;

@@ -6,8 +6,8 @@ use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
 use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::pin_mut;
-use futures::{future::{self, Either}, stream::{select_all, StreamExt}, FutureExt, SinkExt, TryFutureExt, TryStreamExt};
-use crate::message::WebsocketMessage;
+use futures::{future::{self, Either}, stream::{ select_all, StreamExt}, FutureExt, SinkExt, TryFutureExt, TryStreamExt};
+use crate::{message::WebsocketMessage, retry};
 
 ///Список подключенных клиентов с каналом для оправки им сообщений
 static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>> = Lazy::new(|| 
@@ -206,11 +206,8 @@ impl Server
 mod tests
 {
     use std::net::SocketAddr;
-
     use logger::debug;
-
     use crate::WebsocketMessage;
-
     use super::Server;
 
     #[tokio::test]
