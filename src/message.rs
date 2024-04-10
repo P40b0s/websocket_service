@@ -52,22 +52,22 @@ pub struct WebsocketMessage
 impl WebsocketMessage
 {
     ///новый экземпляр в котором нужно самостоятельно серализовать данные с помощью схемы flexbuffers
-    pub fn new(target: &str, method: &str, payload: Option<&[u8]>) -> Self
+    pub fn new<S: ToString>(target: S, method: S, payload: Option<&[u8]>) -> Self
     {
         Self
         {
             success: true,
             command: Command 
             { 
-                target: target.to_owned(),
-                method: method.to_owned(),
+                target: target.to_string(),
+                method: method.to_string(),
                 args: None,
                 payload: payload.and_then(|a| Some(a.to_vec())) 
             }
         }
     }
     ///Новый экземпляр с сериализаций fexbuffers
-    pub fn new_with_flex_serialize<T: Serialize>(target: &str, method: &str, payload: Option<&T>) -> Self
+    pub fn new_with_flex_serialize<T: Serialize, S: ToString>(target: S, method: S, payload: Option<&T>) -> Self
     {
         let payload = payload.and_then(|pl|
         {
@@ -80,8 +80,8 @@ impl WebsocketMessage
             success: true,
             command: Command 
             { 
-                target: target.to_owned(),
-                method: method.to_owned(),
+                target: target.to_string(),
+                method: method.to_string(),
                 args: None,
                 payload
             }
