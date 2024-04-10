@@ -3,9 +3,6 @@ mod server;
 #[cfg(feature = "client")]
 mod client;
 mod message;
-mod sync_client;
-mod sync_server;
-mod tokio_server;
 mod retry;
 pub use retry::retry;
 pub use message::{WebsocketMessage, Command};
@@ -49,13 +46,13 @@ mod test
         loop
         {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let cli_wsmsg: WebsocketMessage = "test_client_cmd:test_client_method".into();
-            let srv_wsmsg: WebsocketMessage = "test_server_cmd:test_server_method".into();
-            let srv_wsmsg2: WebsocketMessage = WebsocketMessage::new_with_flex_serialize("with_payload1", "test", Some(&TestPayload{name: "TEST".to_owned()}));
+            let cli_wsmsg: WebsocketMessage = "test_client_cmd/test_client_method".into();
+            let srv_wsmsg: WebsocketMessage = "test_server_cmd/test_server_method".into();
+            let srv_wsmsg2: WebsocketMessage = WebsocketMessage::new_with_flex_serialize("with_payload1", Some(&TestPayload{name: "TEST".to_owned()}));
             _ = Client::send_message(&cli_wsmsg).await;
             tokio::spawn(async 
             {
-                let srv_wsmsg3: WebsocketMessage = WebsocketMessage::new_with_flex_serialize("from_spawned_task", "test", Some(&TestPayload{name: "SPAWN".to_owned()}));
+                let srv_wsmsg3: WebsocketMessage = WebsocketMessage::new_with_flex_serialize("from_spawned_task", Some(&TestPayload{name: "SPAWN".to_owned()}));
                 _ = Server::broadcast_message_to_all(&srv_wsmsg3).await;
             });
             _ = Server::broadcast_message_to_all(&srv_wsmsg).await;

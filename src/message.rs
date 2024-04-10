@@ -7,7 +7,6 @@ use anyhow::{anyhow, bail, Context, Result};
 pub struct Command
 {
     pub target: String,
-    pub method: String,
     #[serde(skip_serializing_if="Option::is_none")]
     #[serde(default="default_args_option")]
     pub args: Option<Vec<String>>,
@@ -21,10 +20,6 @@ impl Command
     {
         &self.target
     }
-    pub fn get_method(&self) -> &str
-    {
-        &self.method
-    }
     ///извлечь нагрузку из текущего сообщения
     pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : Deserialize<'de>
     {
@@ -36,7 +31,7 @@ impl Command
         }
         else 
         {
-            return Err(anyhow!("В данном сообщении {}:{} отсуствует объект для десериализации", &self.target, &self.method));
+            return Err(anyhow!("В данном сообщении {} отсуствует объект для десериализации", &self.target));
         }
     }
 
@@ -52,7 +47,7 @@ pub struct WebsocketMessage
 impl WebsocketMessage
 {
     ///новый экземпляр в котором нужно самостоятельно серализовать данные с помощью схемы flexbuffers
-    pub fn new<S: ToString>(target: S, method: S, payload: Option<&[u8]>) -> Self
+    pub fn new<S: ToString>(target: S, payload: Option<&[u8]>) -> Self
     {
         Self
         {
@@ -60,14 +55,13 @@ impl WebsocketMessage
             command: Command 
             { 
                 target: target.to_string(),
-                method: method.to_string(),
                 args: None,
                 payload: payload.and_then(|a| Some(a.to_vec())) 
             }
         }
     }
     ///Новый экземпляр с сериализаций fexbuffers
-    pub fn new_with_flex_serialize<T: Serialize, S: ToString>(target: S, method: S, payload: Option<&T>) -> Self
+    pub fn new_with_flex_serialize<T: Serialize, S: ToString>(target: S, payload: Option<&T>) -> Self
     {
         let payload = payload.and_then(|pl|
         {
@@ -81,7 +75,6 @@ impl WebsocketMessage
             command: Command 
             { 
                 target: target.to_string(),
-                method: method.to_string(),
                 args: None,
                 payload
             }
@@ -109,35 +102,7 @@ impl From<&str> for WebsocketMessage
 {
     fn from(value: &str) -> Self 
     {
-        if let Some(sp) = value.split_once(':')
-        {
-            Self
-            {
-                success: true,
-                command: Command 
-                { 
-                    target: sp.0.to_owned(), 
-                    method: sp.1.to_owned(), 
-                    args: None, 
-                    payload: None 
-                }
-            }
-        }
-        else 
-        {
-            Self
-            {
-                
-                success: true,
-                command: Command 
-                { 
-                    target: value.to_owned(), 
-                    method: "".to_owned(), 
-                    args: None, 
-                    payload: None 
-                }
-            }
-        }
+        Self::new(value, None)
     }
 }
 
