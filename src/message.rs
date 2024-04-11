@@ -1,92 +1,136 @@
-use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite::Message;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Command
+
+#[cfg(feature = "binary")]
+#[derive(Debug, Clone, bitcode::Encode, bitcode::Decode)]
+pub struct WebsocketMessage
 {
-    pub target: String,
-    #[serde(skip_serializing_if="Option::is_none")]
-    #[serde(default="default_args_option")]
-    pub args: Option<Vec<String>>,
-    #[serde(skip_serializing_if="Option::is_none")]
-    #[serde(default="default_payload_option")]
+    pub success: bool,
+    ///идентификатор отправления (команда) например error и тогда ошибка отправиться в поле text  
+    ///или settings/tasks/update тогда в поле payload будет лежать объект task для обновления
+    pub cmd: String,
+    pub text: Option<String>,
     pub payload: Option<Vec<u8>>,
 }
-impl Command
-{
-    pub fn get_target(&self) -> &str
-    {
-        &self.target
-    }
-    ///извлечь нагрузку из текущего сообщения
-    pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : Deserialize<'de>
-    {
-        if let Some(pl) = &self.payload
-        {
-            let r = flexbuffers::Reader::get_root(pl.as_slice())?;
-            let deserialize = T::deserialize(r).with_context(|| format!("Данный объект отличается от того который вы хотите получить"))?;
-            return Ok(deserialize);
-        }
-        else 
-        {
-            return Err(anyhow!("В данном сообщении {} отсуствует объект для десериализации", &self.target));
-        }
-    }
 
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "json")]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebsocketMessage
 {
     pub success: bool,
-    pub command: Command,
+    ///идентификатор отправления (команда) например error и тогда ошибка отправиться в поле text  
+    ///или settings/tasks/update тогда в поле payload будет лежать объект task для обновления
+    pub cmd: String,
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(default="default_payload_option")]
+    #[serde(with = "b64")]
+    pub payload: Option<Vec<u8>>,
 }
+
 impl WebsocketMessage
 {
-    ///новый экземпляр в котором нужно самостоятельно серализовать данные с помощью схемы flexbuffers
-    pub fn new<S: ToString>(target: S, payload: Option<&[u8]>) -> Self
+    ///новый экземпляр в котором нужно самостоятельно серализовать данные
+    pub fn new_payload<S: ToString>(cmd: S, payload: &[u8]) -> Self
     {
         Self
         {
             success: true,
-            command: Command 
-            { 
-                target: target.to_string(),
-                args: None,
-                payload: payload.and_then(|a| Some(a.to_vec())) 
-            }
+            cmd: cmd.to_string(),
+            text: None,
+            payload: Some(payload.to_vec())
         }
     }
-    ///Новый экземпляр с сериализаций fexbuffers
-    pub fn new_with_flex_serialize<T: Serialize, S: ToString>(target: S, payload: Option<&T>) -> Self
+    ///новый экземпляр c текстом
+    pub fn new_text<S: ToString>(cmd: S, text: S) -> Self
     {
-        let payload = payload.and_then(|pl|
-        {
-            let mut s = flexbuffers::FlexbufferSerializer::new();
-            let _ = pl.serialize(&mut s).map_err(|e| e.to_string());
-            Some(s.view().to_vec())
-        });
         Self
         {
             success: true,
-            command: Command 
-            { 
-                target: target.to_string(),
-                args: None,
-                payload
-            }
+            cmd: cmd.to_string(),
+            text: Some(text.to_string()),
+            payload: None
         }
     }
-    ///добавить аргументы к текущей команде
-    pub fn add_args(mut self, args: &[String]) -> Self
+    ///новый экземпляр с ошибкой
+    pub fn new_error<S: ToString>(cmd: S, text: S) -> Self
     {
-        self.command.args.as_mut().and_then(|a| Some(a.extend_from_slice(args)));
-        self
+        Self
+        {
+            success: false,
+            cmd: cmd.to_string(),
+            text: Some(text.to_string()),
+            payload: None
+        }
     }
-   
+
+    #[cfg(feature = "binary")]
+    pub fn new<T: bitcode::Encode, S: ToString>(cmd: S, payload: &T) -> Self
+    {
+        Self
+        {
+            success: true,
+            cmd: cmd.to_string(),
+            text: None,
+            payload: Some(bitcode::encode(payload))
+        }
+    }
+    #[cfg(feature = "json")]
+    pub fn new<T: serde::Serialize, S: ToString>(cmd: S, payload: &T) -> Self
+    {
+        let mut bytes: Vec<u8> = Vec::new();
+        let vec = serde_json::to_writer(bytes, payload);
+        Self
+        {
+            success: true,
+            cmd: cmd.to_string(),
+            text: None,
+            payload: Some(bytes)
+        }
+    }
+    #[cfg(feature = "json")]
+    pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : serde::Deserialize<'de>
+    {
+        if let Some(pl) = &self.payload
+        {
+            let obj = serde_json::from_slice::<T>(pl).with_context(|| format!("Данный объект отличается от того который вы хотите получить"))?;
+            return Ok(obj);
+        }
+        else 
+        {
+            return Err(anyhow!("В данном сообщении {} отсуствует объект для десериализации", &self.cmd));
+        }
+    }
+    #[cfg(feature = "json")]
+    pub fn to_transport_message(&self) -> Result<Message>
+    {
+        let mut bytes: Vec<u8> = Vec::new();
+        serde_json::to_writer(bytes, self)?;
+        let msg = Message::binary(bytes);
+        Ok(msg)
+    }
+    #[cfg(feature = "binary")]
+    pub fn to_transport_message(&self) -> Result<Message>
+    {
+        let msg = Message::binary(bitcode::encode(self));
+        Ok(msg)
+    }
+    #[cfg(feature = "binary")]
+    pub fn extract_payload<T>(&self) -> Result<T> where for <'de> T : bitcode::Decode<'de>
+    {
+        if let Some(pl) = &self.payload
+        {
+            let obj = bitcode::decode::<T>(pl).with_context(|| format!("Данный объект отличается от того который вы хотите получить"))?;
+            return Ok(obj);
+        }
+        else
+        {
+            return Err(anyhow!("В данном сообщении {} отсуствует объект для десериализации", &self.cmd));
+        }
+    }
 }
 
 fn default_payload_option() -> Option<Vec<u8>>
@@ -98,52 +142,38 @@ fn default_args_option() -> Option<Vec<String>>
     None
 }
 
-impl From<&str> for WebsocketMessage
+#[cfg(feature = "json")]
+mod b64 
 {
-    fn from(value: &str) -> Self 
+    extern crate base64;
+    use serde::{Serializer, de, Deserialize, Deserializer};
+
+    pub fn serialize<S>(bytes: &Option<Vec<u8>>, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer
     {
-        Self::new(value, None)
-    }
-}
-
-
-
-impl TryFrom<&WebsocketMessage> for Message
-{
-    type Error = String;
-    fn try_from(value: &WebsocketMessage) -> Result<Self, Self::Error> 
-    {
-        let mut s = flexbuffers::FlexbufferSerializer::new();
-        let _ = value.serialize(&mut s).map_err(|e| e.to_string())?;
-        let obj = s.view();
-        let msg = Message::binary(obj);
-        Ok(msg)
-   }
-}
-
-impl TryFrom<&Message> for WebsocketMessage
-{
-    type Error = String;
-    fn try_from(value: &Message) -> Result<Self, Self::Error> 
-    {
-        if !value.is_binary()
+        //serializer.collect_str(&base64::display::Base64Display::standard(bytes))
+        if let Some(b) = bytes
         {
-            let err = "Поступившее сообщение не содержит бинарных данных".to_string();
-            logger::error!("{}", &err);
-            return Err(err);
-        }
-        let data = value.to_owned().into_data();
-        let r = flexbuffers::Reader::get_root(data.as_slice()).unwrap();
-        let deserialize = WebsocketMessage::deserialize(r);
-        if let Ok(d) = deserialize
-        {
-            return Ok(d);
+            serializer.serialize_str(&base64::encode(b))
         }
         else
         {
-            let err = format!("Ошибка десериализации обьекта {:?} поступившего от клиента", &data);
-            logger::error!("{}", &err);
-            return Err(err);
+            serializer.serialize_none()
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+    where D: Deserializer<'de>
+    {
+        let s = <&str>::deserialize(deserializer)?;
+        let decoded = base64::decode(s);
+        if let Ok(d) = decoded
+        {
+            Ok(Some(d))
+        }
+        else
+        {
+            return Err(de::Error::custom(decoded.err().unwrap().to_string()));
         }
     }
 }

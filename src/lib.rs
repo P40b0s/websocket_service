@@ -5,12 +5,13 @@ mod client;
 mod message;
 mod retry;
 pub use retry::retry;
-pub use message::{WebsocketMessage, Command};
+pub use message::WebsocketMessage;
 #[cfg(feature = "server")]
 pub use server::Server;
 #[cfg(feature = "client")]
 pub use client::Client;
-
+#[cfg(feature = "binary")]
+pub use bitcode::{Decode, Encode};
 
 #[cfg(test)]
 mod test
