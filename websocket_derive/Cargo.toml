@@ -1,0 +1,19 @@
+
+[package]
+name = "websocket_derive"
+version = "0.10.1"
+authors = ["Aleks xar <p40b0s@google.com>"]
+description = "Macros for create websocket contract"
+repository = "https://github.com/p40b0s/tokenizer"
+keywords = ["websocket"]
+categories = ["network", "message"]
+edition = "2021"
+
+[lib]
+name = "websocket_derive"
+proc-macro = true
+
+[dependencies]
+syn = { features = ["full"], version = "2.0.58" }
+quote = "1.0.36"
+proc-macro2="1.0.79"

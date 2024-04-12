@@ -1,34 +1,14 @@
 [package]
 name = "websocket_service"
-version = "0.2.0"
+version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "websocket_service"
-path = "src/lib.rs"
+[alias]
+test_connection = "test test_connection"
 
-[features]
-default = ["client", "server",  "binary"]
-client = []
-server = []
-binary = ["dep:bitcode"]
-json = []
-
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[dependencies]
-url="2.5.0"
-logger = {git = "https://github.com/P40b0s/logger.git", branch = "main"}
-serde = {version = "1.0.196", features = ["derive"]}
-serde_json = "1.0.113"
-once_cell="1.17.1"
-tokio = { version = "1.36.0", features = ["macros", "rt", "rt-multi-thread", "test-util", "io-std"] }
-tokio-tungstenite="0.21.0"
-futures = "0.3.30"
-futures-channel = "0.3.30"
-futures-util = { version = "0.3.30", default-features = false, features = ["sink", "std"] }
-flatbuffers = "23.5.26"
-flexbuffers = "2.0.0"
-anyhow="1.0.81"
-bitcode = {version = "0.6.0", optional = true}
-base64 ="0.13.1"
+[workspace]
+members = [
+    "service",
+    "websocket_derive",
+]
+default-members = ["service"]
