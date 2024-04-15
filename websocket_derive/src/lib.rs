@@ -4,11 +4,11 @@ extern crate proc_macro2;
 use proc_macro::TokenStream;
 use quote::{ToTokens};
 use syn::{
-	parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, Data, DeriveInput, Error, ExprAssign, LitInt, LitStr, Meta, MetaNameValue, Path
+	parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, Data, DeriveInput, Error, ExprAssign, Field, Ident, LitInt, LitStr, Meta, MetaNameValue, Path, Type, TypePath
 };
 mod symbol;
 use symbol::Symbol;
-use std::{iter::repeat, str::FromStr};
+use std::{any::Any, iter::repeat, str::FromStr};
 /// The macro compile TokensDefinitions for Lexer.
 ///
 /// An example of this:
@@ -30,37 +30,48 @@ pub fn derive_contract(inp: TokenStream) -> TokenStream
     {
         return e;
     }
+    
     let contracts = parsed.unwrap();
     let enum_names = repeat(&name);
-    
     let enum_vars = contracts.iter().map(|v| v.variant_name.as_ref().unwrap());
+    eprintln!("{:?}", &contracts);
     let enum_val = contracts.iter().map(|v|
     {
         let mut token_string = String::new();
-        if v.named_fields_types.len() > 0
+        eprint!("перебираем все типы...");
+        if v.unnamed_fields.len() > 0
         {
-            token_string += "(v)";
-            proc_macro2::TokenStream::from_str(&token_string).unwrap()
+            let ts = ts_with_data(&v.unnamed_fields);
+            if let Err(e) = ts.as_ref()
+            {
+                eprintln!("{:?}", &e);
+                syn::Error::to_compile_error(&e);
+            }
+            let ts = ts.unwrap();
+            print!("преобразование объекта: {}", ts.to_string());
+            ts
         }
         else 
         {
-            token_string += "";
-            proc_macro2::TokenStream::from_str(&token_string).unwrap()
+            token_string += " => println!(\"dummy\")";
+            //proc_macro2::TokenStream::from_str(&token_string).unwrap()
+            let ts = ts_empty();
+            eprint!("преобразование объекта: {}", ts.to_string());
+            ts
         }
     });
-    eprint!("{:?}", arr);
 	return quote!(
         impl #name
         {
             /// sjhdfjsd sdjfksjdf sjdfks jskdjfk jsndfkj
             ///let arr = [#(#arr)*].to_vec();
-            pub fn get_test(&self) -> String
+            pub fn get_test(&self)
             {
-                let m = match *self
+                let m = match self
                 {
-                    #(#enum_names::#enum_vars #enum_val => "dummy",)*
+                    #(#enum_names::#enum_vars #enum_val,)*
                 };
-                m.to_owned()
+                //m.to_owned();
             }
 		}
 	).into();
@@ -68,9 +79,25 @@ pub fn derive_contract(inp: TokenStream) -> TokenStream
 
 
 
-fn ts()
+fn ts_with_data(fields: &Vec<Ident>) -> Result<proc_macro2::TokenStream, syn::Error>
 {
-
+    if fields.len() > 3
+    {
+        return Err(Error::new_spanned(fields.first().unwrap(), "В неимнованных типах поддерживается не более 3 типов"))
+    }
+    let lit =  r#"(v) => 
+    {
+        println!("{}", v);
+    }"#;
+   Ok(proc_macro2::TokenStream::from_str(lit).unwrap())
+}
+fn ts_empty() -> proc_macro2::TokenStream
+{
+    let lit =  r#" => 
+    {
+        println!("empty");
+    }"#;
+    proc_macro2::TokenStream::from_str(lit).unwrap()
 }
 
 fn parse(input: DeriveInput) -> Result<Vec<ContractAttributes>, TokenStream>
@@ -98,27 +125,36 @@ fn parse(input: DeriveInput) -> Result<Vec<ContractAttributes>, TokenStream>
                             // syn::Fields::Named(n) => quote_spanned! {var.span() => (..)},
                             // syn::Fields::Unnamed(un) => quote_spanned! {var.span() => (..)},
                             // syn::Fields::Unit =>  quote_spanned! {var.span() => (..)},
-                            // Variant can have unnamed fields like `Variant(i32, i64)`
+                            // Variant can have named fields like `Variant {x: i32, y: i32}`
                             syn::Fields::Named(n) => 
                             {
                                 for field in &n.named
                                 {
-                                    contract.named_fields_types.push(field.ty.clone());
+                                    eprintln!("парсинг полей именованного энум: {:?}", &field);
+                                    //TODO не сдалано!
+                                    //contract.named_fields_types.push(field.ty.clone());
                                 }
                             },
-                            // Variant can have named fields like `Variant {x: i32, y: i32}`
+                            
+                            // Variant can have unnamed fields like `Variant(i32, i64)`
                             syn::Fields::Unnamed(un) => 
                             {
                                 for field in &un.unnamed
                                 {
-                                    contract.unnamed_fields.push((field.ident.as_ref().unwrap().clone(), field.ty.clone()));
+                                    eprintln!("парсинг полей неименованного энум: {:?}", &field);
+                                    if let Type::Path(p) = &field.ty
+                                    {
+                                       for s in &p.path.segments
+                                       {
+                                            contract.unnamed_fields.push(s.ident.clone())
+                                       }
+                                    }
                                 }
                             },
                             // Variant can be named Unit like `Variant`
                             //нет не типа ни имени поэтому никак не обрабатываем
                             syn::Fields::Unit =>  (),
                         };
-
                         loc_arr.push(contract.clone());
                     }
                     else 
@@ -178,10 +214,11 @@ struct ContractAttributes
 	cmd: Option<String>,
     is_error: bool,
     variant_name: Option<syn::Ident>,
-    ///типы именованых полей энума Test(String)
-    named_fields_types: Vec<syn::Type>,
-    ///имена:типы неименованных полей энума {a: i32}
-    unnamed_fields: Vec<(syn::Ident, syn::Type)>
+    
+    ///имена:типы именованных полей энума {a: i32}
+    named_fields_types: Vec<(syn::Ident, syn::Type)>,
+    ///типы неименованных полей энума Test(String)
+    unnamed_fields: Vec<syn::Ident>,
 }
 impl Default for ContractAttributes
 {
@@ -202,7 +239,8 @@ impl ContractAttributes
 {
 	pub fn new(attributes: &[Attribute]) -> Result<ContractAttributes, syn::Error>
     {
-		parse_tokens(attributes)
+        let parsed = parse_tokens(attributes);
+		parsed
 	}
 }
 
@@ -229,7 +267,6 @@ fn parse_tokens(attributes: &[Attribute]) -> Result<ContractAttributes, syn::Err
                                     if let syn::Lit::Str(lit_str) = &expr.lit
                                     {
                                         contract.cmd = Some(lit_str.value());
-                                        eprint!("{:?}", &contract.cmd);
                                     }
                                 }
                                 _=> return Err(Error::new_spanned(meta, "Поддерживаются только литеральные значения cmd = \"task\\update\""))
@@ -262,7 +299,6 @@ fn parse_tokens(attributes: &[Attribute]) -> Result<ContractAttributes, syn::Err
     {
         return Err(Error::new_spanned(attributes.get(1), "Атрибуты для правильного формирования контракта не найдены"));
     }
-    eprint!("{:?}", &contract);
 	Ok(contract)
 }
 

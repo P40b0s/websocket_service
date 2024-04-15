@@ -166,17 +166,23 @@ mod test_macro
     {
         ///asfasfsadf
         #[contract(command="t1", is_error=true)]
-        Test1,
+        Test1(String),
         #[contract(command="t2")]
         Test2,
         #[contract(command="t3")]
         Test3
     }
+
+    enum TT
+    {
+        Test1(String, String)
+    }
     #[test]
     fn test()
     {
-        let t1 = Test::Test1;
-        println!("{}", t1.get_test());
+        let t1 = Test::Test1("123".to_owned());
+        //let t1 = Test::Test1;
+        t1.get_test();
         //let msg: WebsocketMessage = Test.into();
     }
 }
