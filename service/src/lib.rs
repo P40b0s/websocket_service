@@ -5,7 +5,7 @@ mod client;
 mod message;
 mod retry;
 pub use retry::retry;
-pub use message::WebsocketMessage;
+pub use message::Converter;
 #[cfg(feature = "server")]
 pub use server::Server;
 #[cfg(feature = "client")]
@@ -17,6 +17,16 @@ pub use bitcode::{Decode, Encode};
 mod test
 {
     #[cfg(feature = "json")]
+    #[derive(serde::Serialize, Debug, serde::Deserialize)]
+    struct TestPayload
+    {
+        name: String,
+        age: u32,
+        characters: Vec<String>,
+        is_man: bool,
+        pay: u64
+    }
+    #[cfg(feature = "flexbuffers")]
     #[derive(serde::Serialize, Debug, serde::Deserialize)]
     struct TestPayload
     {
@@ -56,10 +66,32 @@ mod test
             }
         }
     }
+    #[cfg(feature = "flexbuffers")]
+    #[derive(serde::Serialize, serde::Deserialize, Debug)]
+    pub enum TransportMessage
+    {
+        Test1(TestPayload),
+        Test2(String)
+    }
+    #[cfg(feature = "json")]
+    #[derive(serde::Serialize, serde::Deserialize, Debug)]
+    pub enum TransportMessage
+    {
+        Test1(TestPayload),
+        Test2(String)
+    }
+    #[cfg(feature = "binary")]
+    #[derive(bitcode::Encode, bitcode::Decode, Debug)]
+    pub enum TransportMessage
+    {
+        Test1(TestPayload),
+        Test2(String)
+    }
+    impl Converter for TransportMessage{}
     static COUNT: AtomicU32 = AtomicU32::new(0);
     use std::{net::SocketAddr, sync::atomic::AtomicU32};
     use logger::debug;
-    use crate::message::WebsocketMessage;
+    use crate::message::Converter;
     #[cfg(feature = "client")]
     use crate::Client;
     #[cfg(feature = "server")]
@@ -67,24 +99,24 @@ mod test
     #[cfg(feature = "server")]
     #[cfg(feature = "client")]
     #[tokio::test]
-    ///json -> 1000 итераций теста завершено за: 347.966442ms, 
-    ///bin ->  1000 итераций теста завершено за: 269.315708ms, 290.960685ms, 268.72326ms, 
+    ///json -> 1000 итераций теста завершено за: 91.356768ms, 129.009179ms, 126.985547ms, 125.335948ms, 
+    ///bin ->  1000 итераций теста завершено за: 172.269761ms, 173.672374ms, 170.545242ms, 
+    /// flexbuffers -> 1000 итераций теста завершено за: 148.515492ms, 151.712027ms, 145.205206ms, 
     pub async fn test_connection()
     {
         logger::StructLogger::initialize_logger();
-        Server::start_server("127.0.0.1:3010", on_server_receive).await;
+        Server::<TransportMessage>::start_server("127.0.0.1:3010", on_server_receive).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        Client::start_client("ws://127.0.0.1:3010/", on_client_receive1).await;
-        Client::start_client("ws://127.0.0.1:3010/", on_client_receive2).await;
-        Client::start_client("ws://127.0.0.1:3010/", on_client_receive3).await;
-        Client::start_client("ws://127.0.0.1:3010/", on_client_receive4).await;
+        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive1).await;
+        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive2).await;
+        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive3).await;
+        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive4).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let start = tokio::time::Instant::now();
         for m in 0..1000
         {
-            let srv_wsmsg: WebsocketMessage = WebsocketMessage::new(m.to_string(), &TestPayload::default());
-            _ = Client::send_message(&srv_wsmsg).await;
-            _ = Server::broadcast_message_to_all(&srv_wsmsg).await;
+            _ = Client::send_message(TransportMessage::Test1(TestPayload::default())).await;
+            _ = Server::broadcast_message_to_all(TransportMessage::Test2("Тестовая рассылка от сервера".to_owned())).await;
         }
         let duration = start.elapsed();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -92,15 +124,16 @@ mod test
     }
 
     #[tokio::test]
-    ///json -> 1000 итераций теста завершено за: 19.293236ms,  18.447752ms, 18.980526ms, 
-    ///bin ->  1000 итераций теста завершено за: 18.908326ms, 16.522502ms,  17.019113ms, 
+    ///json -> 1000 итераций теста завершено за:  23.642501ms, 18.955071ms, 18.682914ms, 18.905361ms, 
+    ///bin ->  1000 итераций теста завершено за: 20.686414ms, 19.505297ms, 18.415195ms, 17.314488ms, 17.15283ms, 17.544082ms, 
+    /// flexbuffers -> 21.808916ms, 21.779735ms,  21.757869ms, 
     pub async fn test_serialization()
     {
         logger::StructLogger::initialize_logger();
         let start = tokio::time::Instant::now();
         for m in 0..1000
         {
-            let _ = WebsocketMessage::new(m.to_string(), &TestPayload::default());
+            let _ = TransportMessage::Test1(TestPayload::default()).to_binary();
         }
         let duration = start.elapsed();
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -108,45 +141,60 @@ mod test
     }
 
     #[tokio::test]
-    ///json -> 1000 итераций теста завершено за: 8.069135ms, 7.929416ms, 
-    ///bin ->  1000 итераций теста завершено за: 13.323196ms, 14.004534ms, 13.460934ms, 
+    ///json -> 1000 итераций теста завершено за: 9.710066ms, 8.600755ms,   7.954601ms, 
+    ///bin ->  1000 итераций теста завершено за: 18.378167ms, 18.723982ms, 18.360396ms, 
+    ///flexbuffers ->  1000 итераций теста завершено за: 15.923455ms,  11.532457ms, 13.492814ms, 
     pub async fn test_deserialization()
     {
         logger::StructLogger::initialize_logger();
-        let msg = WebsocketMessage::new("123", &TestPayload::default());
+        let msg = TransportMessage::Test1(TestPayload::default()).to_binary();
         
         let start = tokio::time::Instant::now();
         for m in 0..1000
         {
-            let _ = &msg.extract_payload::<TestPayload>();
+            let _ = &TransportMessage::from_binary(&msg);
         }
         let duration = start.elapsed();
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         logger::info!("1000 итераций теста сериализации завершено за: {:?}, ", duration);
     }
     
-    async fn on_server_receive(addr: SocketAddr, msg: WebsocketMessage)
+    async fn on_server_receive(addr: SocketAddr, msg: TransportMessage)
     {
-        //debug!("Сервером получено сообщение от клиента {} -> {}", &addr,  &msg.get_cmd());
+        // let mut string = Option::<String>::None;
+        // let mut  object = Option::<TestPayload>::None;
+        // match msg
+        // {
+        //     TransportMessage::Test1(p) => object = Some(p),
+        //     TransportMessage::Test2(s) => string = Some(s)
+        // };
+        //debug!("Сервером получено сообщение от клиента {} -> {:?} {:?}", &addr,  string, object);
         ()
     }
-    fn on_client_receive1(msg: WebsocketMessage)
+    fn on_client_receive1(msg: TransportMessage)
     {
-        //debug!("Клиентом1 полчено сообщение {} {:?}", &msg.get_cmd(), &msg.extract_payload::<TestPayload>());
+        // let mut string = Option::<String>::None;
+        // let mut  object = Option::<TestPayload>::None;
+        // match msg
+        // {
+        //     TransportMessage::Test1(p) => object = Some(p),
+        //     TransportMessage::Test2(s) => string = Some(s)
+        // };
+        // debug!("Клиентом1 полчено сообщение {:?} или {:?}", string, object);
         COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         ()
     }
-    fn on_client_receive2(msg: WebsocketMessage)
+    fn on_client_receive2(msg: TransportMessage)
     {
         //debug!("Клиентом2 полчено сообщение через канал {} {:?}", &msg.get_cmd(), &msg.extract_payload::<TestPayload>());
         ()
     }
-    fn on_client_receive3(msg: WebsocketMessage)
+    fn on_client_receive3(msg: TransportMessage)
     {
         //debug!("Клиентом3 полчено сообщение через канал {} {:?}", &msg.get_cmd(), &msg.extract_payload::<TestPayload>());
         ()
     }
-    fn on_client_receive4(msg: WebsocketMessage)
+    fn on_client_receive4(msg: TransportMessage)
     {
         //debug!("Клиентом4 полчено сообщение через канал {} {:?}", &msg.get_cmd(), &msg.extract_payload::<TestPayload>());
         ()
@@ -154,35 +202,35 @@ mod test
 }
 
 
-#[cfg(test)]
-mod test_macro
-{
-    use websocket_derive::Contract;
+// #[cfg(test)]
+// mod test_macro
+// {
+//     use websocket_derive::Contract;
 
-    use crate::WebsocketMessage;
+//     use crate::WebsocketMessage;
 
-    #[derive(Contract)]
-    pub enum Test
-    {
-        ///asfasfsadf
-        #[contract(command="t1", is_error=true)]
-        Test1(String),
-        #[contract(command="t2")]
-        Test2,
-        #[contract(command="t3")]
-        Test3
-    }
+//     #[derive(Contract)]
+//     pub enum Test
+//     {
+//         ///asfasfsadf
+//         #[contract(command="t1", is_error=true)]
+//         Test1(String),
+//         #[contract(command="t2")]
+//         Test2,
+//         #[contract(command="t3")]
+//         Test3
+//     }
 
-    enum TT
-    {
-        Test1(String, String)
-    }
-    #[test]
-    fn test()
-    {
-        let t1 = Test::Test1("123".to_owned());
-        //let t1 = Test::Test1;
-        t1.get_test();
-        //let msg: WebsocketMessage = Test.into();
-    }
-}
+//     enum TT
+//     {
+//         Test1(String, String)
+//     }
+//     #[test]
+//     fn test()
+//     {
+//         let t1 = Test::Test1("123".to_owned());
+//         //let t1 = Test::Test1;
+//         t1.get_test();
+//         //let msg: WebsocketMessage = Test.into();
+//     }
+// }

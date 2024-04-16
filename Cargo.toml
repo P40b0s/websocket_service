@@ -12,3 +12,6 @@ members = [
     "websocket_derive",
 ]
 default-members = ["service"]
+
+[workspace.dependencies]
+service = {path="./service"}

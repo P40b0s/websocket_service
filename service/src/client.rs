@@ -6,36 +6,21 @@ use logger::{backtrace, debug, error, warn};
 use once_cell::sync::OnceCell;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use crate::{message::WebsocketMessage, retry};
+use crate::{message::{Converter}, retry};
 
 static SENDER: OnceCell<Mutex<UnboundedSender<Message>>> = OnceCell::new();
 static IS_CONNECTED: AtomicBool = AtomicBool::new(false);
 //static RECEIVER: OnceCell<Mutex<UnboundedReceiver<WebsocketMessage>>> = OnceCell::new();
 //static RECEIVER_FN_ISACTIVE: AtomicBool = AtomicBool::new(false);
 
-pub struct Client;
-impl Client
+pub struct Client<T: Converter>
 {
-    /// # Examples
-    /// ```
-    /// async run_client()
-    /// {
-    ///     Client::start_client("ws://127.0.0.1:3010/", on_client_receive).await;
-    ///     fn on_client_receive(msg: WebsocketMessage)
-    ///     {
-    ///         debug!("Клиентом1 полчено сообщение через канал {} {:?}", &msg.command.target, &msg.command.payload);
-    ///         ()
-    ///     }
-    ///     loop
-    ///     {
-    ///         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-    ///         let cli_wsmsg: WebsocketMessage = "test_client_cmd:test_client_method".into();
-    ///         _ = Client::send_message(&cli_wsmsg).await;
-    ///     }
-    /// }
-    /// ```
+    phantom: std::marker::PhantomData<T>
+}
+impl<T> Client<T> where T: Converter
+{
     pub async fn start_client<F>(addr: &str, f:F)
-    where F:  Send + Sync + Copy + 'static + Fn(WebsocketMessage)
+    where F:  Send + Sync + Copy + 'static + Fn(T)
     {
         let addr = addr.to_owned();
         tokio::spawn(async move
@@ -68,21 +53,10 @@ impl Client
     ///     }
     /// }
     /// ```
-    pub async fn start_client_with_retry<F>(addr: &str, f:F, attempts: u8, delay: u64)
-    where F:  Send + Sync + Copy + 'static + Fn(WebsocketMessage)
-    {
-        let addr = addr.to_owned();
-        tokio::spawn(async move
-        {
-            while Self::start(addr.clone(), f, attempts, delay).await == false
-            {
-                Self::start(addr.clone(), f, attempts, delay).await;
-            }
-        });
-    }
+
     ///ws://127.0.0.1:3010/
     async fn start<F>(addr: String, f:F, attempts: u8, delay: u64) -> bool
-    where F:  Send + Copy + 'static + Fn(WebsocketMessage)
+    where F:  Send + Copy + 'static + Fn(T)
     {
         let (sender, local_receiver) = unbounded::<Message>();
         if let Some(s) = SENDER.get()
@@ -121,7 +95,7 @@ impl Client
                 {
                     if message.is_binary()
                     {
-                        let msg = WebsocketMessage::from_transport_message(&message);
+                        let msg = T::from_binary(&message.into_data());
                         if let Ok(m) = msg
                         {
                             f(m)
@@ -146,7 +120,7 @@ impl Client
         return false;
     }
 
-    pub async fn send_message(wsmsg: &WebsocketMessage)
+    pub async fn send_message(wsmsg: T)
     {
         if !IS_CONNECTED.load(std::sync::atomic::Ordering::SeqCst)
         {
@@ -154,18 +128,14 @@ impl Client
         }
         else 
         {
-            if let Ok(msg) = wsmsg.to_transport_message()
-            {
-                let _ = SENDER.get().unwrap().lock().await.unbounded_send(msg);
-            }
-            else
-            {
-                error!("Ошибка отправки сообщения серверу")
-            }
+            let message = wsmsg.to_binary();
+            let message = Message::Binary(message);
+            let _ = SENDER.get().unwrap().lock().await.unbounded_send(message);
         }
     }
     pub async fn ping()
     {
+        
         if IS_CONNECTED.load(std::sync::atomic::Ordering::SeqCst)
         {
             let msg = Message::Ping([12].to_vec());
@@ -179,22 +149,26 @@ impl Client
 mod test
 {
     use logger::debug;
-    use crate::WebsocketMessage;
+    //use crate::WebsocketMessage;
     use super::Client;
 
-    #[tokio::test]
-    async fn test_client()
+    enum Packet
     {
-        logger::StructLogger::initialize_logger();
-        super::Client::start_client("ws://127.0.0.1:3010/", receiver).await;
-        loop 
-        {
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let _ = Client::ping().await;
-        }
+        Test1
     }
-    fn receiver(ms: WebsocketMessage)
-    {
-        debug!("клиенту поступило новое сообщение {:?}", ms);
-    }
+    // #[tokio::test]
+    // async fn test_client()
+    // {
+    //     logger::StructLogger::initialize_logger();
+    //     super::Client::start_client("ws://127.0.0.1:3010/", receiver).await;
+    //     loop 
+    //     {
+    //         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    //         let _ = Client::ping().await;
+    //     }
+    // }
+    // fn receiver(ms: WebsocketMessage)
+    // {
+    //     debug!("клиенту поступило новое сообщение {:?}", ms);
+    // }
 }
