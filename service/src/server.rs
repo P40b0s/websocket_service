@@ -15,49 +15,103 @@ static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>>
     Arc::new(RwLock::new(HashMap::new()))
 });
 
-pub struct Server<T : Converter>
+pub trait Server<T : Converter + 'static>
 {
-    phantom: std::marker::PhantomData<T>
-}
-impl<T> Server<T> where T: Converter + 'static
-{
-    pub async fn start_server<F, Fut: std::future::Future<Output = ()> + Send>(host: &str, f: F)
+    fn start_server<F, Fut: std::future::Future<Output = ()> + Send + Sync>(host: &str, f: F) -> impl std::future::Future<Output = ()> + Send
     where F:  Send + Sync+ 'static + Copy + Fn(SocketAddr, T) -> Fut
     {
-        let addr = host.to_string();
-        tokio::spawn(async move
-        {
-            debug!("Старт сервера websocket...");
-            // Create the event loop and TCP listener we'll accept connections on.
-            let listener = tokio::net::TcpListener::bind(&addr).await;
-            if let Ok(lis) = listener
+        async move {
+            let addr = host.to_string();
+            tokio::spawn(async move
             {
-                debug!("Websocet доступен на : {}", &addr);
-                while let Ok((stream, _)) = lis.accept().await 
+                debug!("Старт сервера websocket...");
+                // Create the event loop and TCP listener we'll accept connections on.
+                let listener = tokio::net::TcpListener::bind(&addr).await;
+                if let Ok(lis) = listener
                 {
-                    tokio::spawn(async move
+                    debug!("Websocet доступен на : {}", &addr);
+                    while let Ok((stream, _)) = lis.accept().await 
                     {
-                        Self::accept_connection(stream, f).await;
-                    });
+                        tokio::spawn(async move
+                        {
+                            accept_connection(stream, f).await;
+                        });
+                    }
+                }
+                else
+                {
+                    logger::error!("Ошибка запуска сервера: {}", listener.unwrap_err().to_string())
+                }
+            });
+            ()
+        }
+    }
+
+    
+
+    
+    /// Сообщения всем подключеным клиентам
+    fn broadcast_message_to_all(msg: T)  -> impl std::future::Future<Output = ()> + Send
+    {
+        async move 
+        {
+            let state = CLIENTS.read().await;
+            //debug!("Отправка сообщений {} клиентам", state.len());
+            let msg =   msg.to_binary();
+            let message = Message::binary(msg);
+            for (_, sender) in state.iter()
+            {
+                if let Err(err) = sender.unbounded_send(message.clone())
+                {
+                    error!("{:?}", err);
                 }
             }
-            else
-            {
-                logger::error!("Ошибка запуска сервера: {}", listener.unwrap_err().to_string())
-            }
-        });
+        }
     }
-
-    async fn add_message_sender(socket: &SocketAddr) -> UnboundedReceiver<Message>
+    ///Сообщения всем подключеным клиентам кроме того что передан параметром addr
+    fn message_to_all_except_sender(sender_addr: &SocketAddr, msg: T) -> impl std::future::Future<Output = ()> + Send
     {
-        let (sender, receiver) = unbounded();
-        let mut guard =   CLIENTS.write().await;
-        guard.insert(socket.clone(), sender);
-        drop(guard);
-        receiver
+        async move {
+        let state = CLIENTS
+            .read()
+            .await;
+        let msg =   msg.to_binary();
+        let message = Message::binary(msg);
+        for (addr, sender) in state.iter()
+        {
+            if sender_addr != addr
+            {
+                if let Err(err) = sender.unbounded_send(message.clone())
+                {
+                    error!("{:?}", err);
+                }
+            }
+        }
+        }
     }
+    fn send(msg: T, target_addr: &SocketAddr) -> impl std::future::Future<Output = ()> + Send
+    {
+        async move 
+        {
+            let msg =   msg.to_binary();
+            let message = Message::binary(msg);
+            if let Some(sender) = CLIENTS.read().await.get(target_addr)
+            {
+                sender.unbounded_send(message).unwrap();
+            }
+        }
+    }
+}
 
-    async fn accept_connection<F, Fut: std::future::Future<Output = ()> + Send>(stream: tokio::net::TcpStream, f:F)
+async fn add_message_sender(socket: &SocketAddr) -> UnboundedReceiver<Message>
+{
+    let (sender, receiver) = unbounded();
+    let mut guard =   CLIENTS.write().await;
+    guard.insert(socket.clone(), sender);
+    drop(guard);
+    receiver
+}
+async fn accept_connection<F, T: Converter + 'static,  Fut: std::future::Future<Output = ()> + Send + Sync>(stream: tokio::net::TcpStream, f:F)
     where F:  Send + Copy + 'static + Fn(SocketAddr, T) -> Fut
     {
         let addr = stream.peer_addr().expect("Соединение должно иметь исходящий ip адрес");
@@ -75,7 +129,7 @@ impl<T> Server<T> where T: Converter + 'static
         let ws_stream = tokio_tungstenite::accept_async(stream)
             .await
             .expect("Ошибка handsnake при извлечении данных из websocket");
-        let receiver = Self::add_message_sender(&addr).await;
+        let receiver = add_message_sender(&addr).await;
         let (outgoing, incoming) = ws_stream.split();
        
         let from_ws = incoming.try_for_each(|msg| 
@@ -120,53 +174,6 @@ impl<T> Server<T> where T: Converter + 'static
         drop(guard);
         debug!("Клиент {} отсоединен", &addr);
     }
-    /// Сообщения всем подключеным клиентам
-    pub async fn broadcast_message_to_all(msg: T)
-    {
-        let state = CLIENTS.read().await;
-        //debug!("Отправка сообщений {} клиентам", state.len());
-        let msg =   msg.to_binary();
-        let message = Message::binary(msg);
-        for (_, sender) in state.iter()
-        {
-            if let Err(err) = sender.unbounded_send(message.clone())
-            {
-                error!("{:?}", err);
-            }
-        }
-    }
-    ///Сообщения всем подключеным клиентам кроме того что передан параметром addr
-    pub async fn message_to_all_except_sender(sender_addr: &SocketAddr, msg: T)
-    {
-        let state = CLIENTS
-            .read()
-            .await;
-        let msg =   msg.to_binary();
-        let message = Message::binary(msg);
-        for (addr, sender) in state.iter()
-        {
-            if sender_addr != addr
-            {
-                if let Err(err) = sender.unbounded_send(message.clone())
-                {
-                    error!("{:?}", err);
-                }
-            }
-        }
-    }
-    pub async fn send(msg: T, target_addr: &SocketAddr)
-    {
-        let msg =   msg.to_binary();
-        let message = Message::binary(msg);
-        if let Some(sender) = CLIENTS.read().await.get(target_addr)
-        {
-            sender.unbounded_send(message).unwrap();
-        }
-    }
-}
-
-
-
 #[cfg(test)]
 mod tests
 {
