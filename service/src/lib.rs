@@ -80,6 +80,13 @@ mod test
         Test1(TestPayload),
         Test2(String)
     }
+    #[cfg(feature = "json")]
+    #[derive(serde::Serialize, serde::Deserialize, Debug)]
+    pub enum TransportMessage2
+    {
+        Test1(TestPayload),
+        Test2(String)
+    }
     #[cfg(feature = "binary")]
     #[derive(bitcode::Encode, bitcode::Decode, Debug)]
     pub enum TransportMessage
@@ -88,6 +95,17 @@ mod test
         Test2(String)
     }
     impl Converter for TransportMessage{}
+    impl Converter for TransportMessage2{}
+    pub struct Client1;
+    impl Client<TransportMessage> for Client1{}
+    pub struct Client2;
+    impl Client<TransportMessage> for Client2{}
+    pub struct Client3;
+    impl Client<TransportMessage> for Client3{}
+    pub struct Client4;
+    impl Client<TransportMessage> for Client4{}
+    pub struct WsServer;
+    impl Server<TransportMessage> for WsServer{}
     static COUNT: AtomicU32 = AtomicU32::new(0);
     use std::{net::SocketAddr, sync::atomic::AtomicU32};
     use logger::debug;
@@ -105,18 +123,36 @@ mod test
     pub async fn test_connection()
     {
         logger::StructLogger::initialize_logger();
-        Server::<TransportMessage>::start_server("127.0.0.1:3010", on_server_receive).await;
+        WsServer::start_server("127.0.0.1:3010", |addr, msg|
+        {
+            async move
+            {
+                // let mut string = Option::<String>::None;
+                // let mut  object = Option::<TestPayload>::None;
+                // match msg
+                // {
+                //     TransportMessage::Test1(p) => object = Some(p),
+                //     TransportMessage::Test2(s) => string = Some(s)
+                // };
+                // debug!("Сервером получено сообщение от клиента {} -> {:?} {:?}", &addr,  string, object);
+                ()
+            }
+        }).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive1).await;
-        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive2).await;
-        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive3).await;
-        Client::<TransportMessage>::start_client("ws://127.0.0.1:3010/", on_client_receive4).await;
+        Client1::start_client("ws://127.0.0.1:3010/", |msg: TransportMessage|
+        {
+            COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ()
+        }).await;
+        Client2::start_client("ws://127.0.0.1:3010/", on_client_receive2).await;
+        Client3::start_client("ws://127.0.0.1:3010/", on_client_receive3).await;
+        Client4::start_client("ws://127.0.0.1:3010/", on_client_receive4).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let start = tokio::time::Instant::now();
         for m in 0..1000
         {
-            _ = Client::send_message(TransportMessage::Test1(TestPayload::default())).await;
-            _ = Server::broadcast_message_to_all(TransportMessage::Test2("Тестовая рассылка от сервера".to_owned())).await;
+            _ = Client1::send_message(TransportMessage::Test1(TestPayload::default())).await;
+            _ = WsServer::broadcast_message_to_all(TransportMessage::Test2("Тестовая рассылка от сервера".to_owned())).await;
         }
         let duration = start.elapsed();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -159,18 +195,18 @@ mod test
         logger::info!("1000 итераций теста сериализации завершено за: {:?}, ", duration);
     }
     
-    async fn on_server_receive(addr: SocketAddr, msg: TransportMessage)
-    {
-        // let mut string = Option::<String>::None;
-        // let mut  object = Option::<TestPayload>::None;
-        // match msg
-        // {
-        //     TransportMessage::Test1(p) => object = Some(p),
-        //     TransportMessage::Test2(s) => string = Some(s)
-        // };
-        //debug!("Сервером получено сообщение от клиента {} -> {:?} {:?}", &addr,  string, object);
-        ()
-    }
+    // async fn on_server_receive(addr: SocketAddr, msg: TransportMessage)
+    // {
+    //     let mut string = Option::<String>::None;
+    //     let mut  object = Option::<TestPayload>::None;
+    //     match msg
+    //     {
+    //         TransportMessage::Test1(p) => object = Some(p),
+    //         TransportMessage::Test2(s) => string = Some(s)
+    //     };
+    //     debug!("Сервером получено сообщение от клиента {} -> {:?} {:?}", &addr,  string, object);
+    //     ()
+    // }
     fn on_client_receive1(msg: TransportMessage)
     {
         // let mut string = Option::<String>::None;
