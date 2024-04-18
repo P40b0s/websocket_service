@@ -13,6 +13,9 @@ pub use client::Client;
 #[cfg(feature = "binary")]
 pub use bitcode::{Decode, Encode};
 
+
+
+
 #[cfg(test)]
 mod test
 {
@@ -138,15 +141,13 @@ mod test
                 ()
             }
         }).await;
+
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         Client1::start_client("ws://127.0.0.1:3010/", |msg: TransportMessage|
         {
             COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            ()
+           
         }).await;
-        Client2::start_client("ws://127.0.0.1:3010/", on_client_receive2).await;
-        Client3::start_client("ws://127.0.0.1:3010/", on_client_receive3).await;
-        Client4::start_client("ws://127.0.0.1:3010/", on_client_receive4).await;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let start = tokio::time::Instant::now();
         for m in 0..1000

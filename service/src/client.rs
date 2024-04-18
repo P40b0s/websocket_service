@@ -10,8 +10,9 @@ use crate::{message::Converter, retry};
 //TODO Пока могу обслужить только клиента в единственном экземпляре
 static SENDER: OnceCell<Mutex<UnboundedSender<Message>>> = OnceCell::new();
 static IS_CONNECTED: AtomicBool = AtomicBool::new(false);
-//static SENDER2: Lazy<Mutex<HashMap<String, UnboundedSender<Message>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-//static IS_CONNECTEDD : Lazy<Mutex<HashMap<String, bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+
+
 pub trait Client<T: Converter>
 {
     fn start_client<F>(addr: &str, f:F)  -> impl Future<Output = ()> + Send
@@ -20,16 +21,6 @@ pub trait Client<T: Converter>
         let addr = addr.to_owned();
         async move 
         {
-            // if IS_CONNECTEDD.lock().await.get(&addr).is_some()
-            // {
-            //     logger::error!("Ошибка! уже активен один клиент подключенный к {}", &addr);
-            //     return ();
-            // }
-            // else 
-            // {
-            //     let mut guard = IS_CONNECTEDD.lock().await;
-            //     guard.insert(addr.clone(), false);
-            // }
             tokio::spawn(async move
             {
                 loop
@@ -43,8 +34,6 @@ pub trait Client<T: Converter>
     {
         IS_CONNECTED.load(std::sync::atomic::Ordering::SeqCst)
     }
-    ///ws://127.0.0.1:3010/
-    
     fn send_message(wsmsg: T) -> impl Future<Output = ()> + Send
     {
         async {
@@ -76,19 +65,6 @@ async fn start<F, T: Converter>(addr: String, f:F, attempts: u8, delay: u64) -> 
 where F:  Send + Copy + 'static + Fn(T)
 {
     let (sender, local_receiver) = unbounded::<Message>();
-    // let current_id = Client::<T>::client_id();
-    // if let Some(s) = SENDER2.get()
-    // {
-    //     let mut guard = s.lock().await;
-    //     if let Some(value) = guard.get_mut(&current_id)
-    //     {
-    //         *value = sender.clone()
-    //     }
-    // }
-    // else
-    // {
-    //     let _ = SENDER.set(Mutex::new(sender.clone()));
-    // }
     if let Some(s) = SENDER.get()
     {
         let mut guard = s.lock().await;
@@ -98,8 +74,6 @@ where F:  Send + Copy + 'static + Fn(T)
     {
         let _ = SENDER.set(Mutex::new(sender.clone()));
     }
-    //let snd = SENDER.get_or_init(|| Mutex::new(sender.clone())).lock().await;
-    //let _ = SENDER.set(sender.clone());
     let connected = retry(attempts, delay, || connect_async(&addr)).await;
     if let Err(e) = connected.as_ref()
     {
