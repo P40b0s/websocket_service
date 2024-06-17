@@ -1,13 +1,13 @@
-use logger::{debug, error, info};
+use anyhow::Context;
+use logger::{debug, error};
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock;
-use tokio_tungstenite::tungstenite::{handshake::server::{Request, Response}, Message};
-use std::{collections::HashMap, sync::{atomic::AtomicBool, Arc}};
+use tokio_tungstenite::tungstenite::Message;
+use std::{collections::HashMap, sync::Arc};
 use std::net::SocketAddr;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::pin_mut;
-use futures::{future::{self, Either}, stream::{ select_all, StreamExt}, FutureExt, SinkExt, TryFutureExt, TryStreamExt};
-use crate::{retry, Converter};
+use futures::{future, stream::StreamExt, TryStreamExt};
 
 ///Список подключенных клиентов с каналом для оправки им сообщений
 static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>> = Lazy::new(|| 
@@ -15,7 +15,7 @@ static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>>
     Arc::new(RwLock::new(HashMap::new()))
 });
 
-pub trait Server<T : Converter + 'static>
+pub trait Server<T> where T: 'static + serde::Serialize + Send + Sync, for <'de> T : serde::Deserialize<'de> + Sized + Send
 {
     fn start_server<F, Fut: std::future::Future<Output = ()> + Send + Sync>(host: &str, f: F) -> impl std::future::Future<Output = ()> + Send
     where F:  Send + Sync+ 'static + Copy + Fn(SocketAddr, T) -> Fut
@@ -57,8 +57,9 @@ pub trait Server<T : Converter + 'static>
         {
             let state = CLIENTS.read().await;
             //debug!("Отправка сообщений {} клиентам", state.len());
-            let msg =   msg.to_binary();
-            let message = Message::binary(msg);
+            let mut message: Vec<u8> = Vec::new();
+            let _ = serde_json::to_writer(&mut message, &msg);
+            let message = Message::Binary(message);
             for (_, sender) in state.iter()
             {
                 if let Err(err) = sender.unbounded_send(message.clone())
@@ -75,8 +76,9 @@ pub trait Server<T : Converter + 'static>
         let state = CLIENTS
             .read()
             .await;
-        let msg =   msg.to_binary();
-        let message = Message::binary(msg);
+        let mut message: Vec<u8> = Vec::new();
+        let _ = serde_json::to_writer(&mut message, &msg);
+        let message = Message::Binary(message);
         for (addr, sender) in state.iter()
         {
             if sender_addr != addr
@@ -93,8 +95,9 @@ pub trait Server<T : Converter + 'static>
     {
         async move 
         {
-            let msg =   msg.to_binary();
-            let message = Message::binary(msg);
+            let mut message: Vec<u8> = Vec::new();
+            let _ = serde_json::to_writer(&mut message, &msg);
+            let message = Message::Binary(message);
             if let Some(sender) = CLIENTS.read().await.get(target_addr)
             {
                 sender.unbounded_send(message).unwrap();
@@ -111,8 +114,8 @@ async fn add_message_sender(socket: &SocketAddr) -> UnboundedReceiver<Message>
     drop(guard);
     receiver
 }
-async fn accept_connection<F, T: Converter + 'static,  Fut: std::future::Future<Output = ()> + Send + Sync>(stream: tokio::net::TcpStream, f:F)
-    where F:  Send + Copy + 'static + Fn(SocketAddr, T) -> Fut
+async fn accept_connection<F, T : 'static,  Fut: std::future::Future<Output = ()> + Send + Sync>(stream: tokio::net::TcpStream, f:F)
+    where T: serde::Serialize + Send + Sync, for <'de> T : serde::Deserialize<'de> + Sized + Send, F:  Send + Copy + 'static + Fn(SocketAddr, T) -> Fut
     {
         let addr = stream.peer_addr().expect("Соединение должно иметь исходящий ip адрес");
         // let headers_callback = |req: &Request, mut response: Response| 
@@ -136,9 +139,10 @@ async fn accept_connection<F, T: Converter + 'static,  Fut: std::future::Future<
         {
             if !msg.is_ping() && !msg.is_pong() && !msg.is_empty() && !msg.is_close()
             {
-                let msg =  T::from_binary(&msg.into_data());
+                let msg = serde_json::from_slice::<T>(&msg.into_data()).with_context(|| format!("Данный объект отличается от того который вы хотите получить"));
                 if let Ok(d) = msg
                 {
+                    logger::info!("Сервер получил новое сообщение");
                     tokio::spawn(async move 
                     {
                         f(addr.clone(), d).await;
@@ -146,7 +150,7 @@ async fn accept_connection<F, T: Converter + 'static,  Fut: std::future::Future<
                 }
                 else
                 {
-                    error!("Ошибка десериализации обьекта {:?} поступившего от клиента {} ", &msg.unwrap_err().to_string(), &addr);
+                    error!("Ошибка десериализации обьекта {:?} поступившего от клиента {} ", &msg.err().unwrap().to_string(), &addr);
                 }
             }
             else if msg.is_ping()
@@ -177,25 +181,6 @@ async fn accept_connection<F, T: Converter + 'static,  Fut: std::future::Future<
 #[cfg(test)]
 mod tests
 {
-    use std::net::SocketAddr;
-    use logger::debug;
-    //use crate::WebsocketMessage;
-    use super::Server;
-
-    // #[tokio::test]
-    // async fn test_server()
-    // {
-    //     logger::StructLogger::initialize_logger();
-    //     Server::start_server("127.0.0.1:3010", receiver).await;
-    //     loop 
-    //     {
-    //         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-    //     }
-    // }
-
-    // async fn receiver(addr: SocketAddr, wsmsg: WebsocketMessage)
-    // {
-    //     debug!("сообщение от клиента {} {:?}", addr, wsmsg)
-    // }
+   
 }
 
