@@ -18,7 +18,7 @@ static CLIENTS: Lazy<Arc<RwLock<HashMap<SocketAddr, UnboundedSender<Message>>>>>
 pub trait Server<T> where T: 'static + serde::Serialize + Send + Sync, for <'de> T : serde::Deserialize<'de> + Sized + Send
 {
     fn start_server<F, Fut: std::future::Future<Output = ()> + Send + Sync>(host: &str, f: F) -> impl std::future::Future<Output = ()> + Send
-    where F:  Send + Sync+ 'static + Copy + Fn(SocketAddr, T) -> Fut
+    where F:  Send + Sync + 'static + Clone + Fn(SocketAddr, T) -> Fut
     {
         async move {
             let addr = host.to_string();
@@ -32,6 +32,7 @@ pub trait Server<T> where T: 'static + serde::Serialize + Send + Sync, for <'de>
                     debug!("Websocet доступен на : {}", &addr);
                     while let Ok((stream, _)) = lis.accept().await 
                     {
+                        let f = f.clone();
                         tokio::spawn(async move
                         {
                             accept_connection(stream, f).await;
@@ -115,7 +116,7 @@ async fn add_message_sender(socket: &SocketAddr) -> UnboundedReceiver<Message>
     receiver
 }
 async fn accept_connection<F, T : 'static,  Fut: std::future::Future<Output = ()> + Send + Sync>(stream: tokio::net::TcpStream, f:F)
-    where T: serde::Serialize + Send + Sync, for <'de> T : serde::Deserialize<'de> + Sized + Send, F:  Send + Copy + 'static + Fn(SocketAddr, T) -> Fut
+    where T: serde::Serialize + Send + Sync, for <'de> T : serde::Deserialize<'de> + Sized + Send, F:  Send + Clone + 'static + Fn(SocketAddr, T) -> Fut
     {
         let addr = stream.peer_addr().expect("Соединение должно иметь исходящий ip адрес");
         // let headers_callback = |req: &Request, mut response: Response| 
@@ -143,6 +144,7 @@ async fn accept_connection<F, T : 'static,  Fut: std::future::Future<Output = ()
                 if let Ok(d) = msg
                 {
                     logger::info!("Сервер получил новое сообщение");
+                    let f = f.clone();
                     tokio::spawn(async move 
                     {
                         f(addr.clone(), d).await;
