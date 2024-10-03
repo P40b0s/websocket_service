@@ -1,0 +1,12 @@
+[03-10-2024 14:44:19]:⚙ DEBUG -> Старт сервера websocket...
+[03-10-2024 14:44:19]:❌ Ошибка -> Ошибка запуска сервера: Address already in use (os error 98)
+[03-10-2024 14:44:19]:⚙ DEBUG -> Client handshake done.
+[03-10-2024 14:44:19]:⚙ DEBUG -> Рукопожатие с сервером успешно
+[03-10-2024 14:44:19]:⚙ DEBUG -> * connection: Upgrade
+[03-10-2024 14:44:19]:⚙ DEBUG -> * upgrade: websocket
+[03-10-2024 14:44:19]:⚙ DEBUG -> * sec-websocket-accept: YGS409tXEnKTbRldTz4726CjoSc=
+[03-10-2024 14:44:20]:⚙ DEBUG -> Client handshake done.
+[03-10-2024 14:44:20]:⚙ DEBUG -> Рукопожатие с сервером успешно
+[03-10-2024 14:44:20]:⚙ DEBUG -> * connection: Upgrade
+[03-10-2024 14:44:20]:⚙ DEBUG -> * upgrade: websocket
+[03-10-2024 14:44:20]:⚙ DEBUG -> * sec-websocket-accept: 7Fu/A41nI67bant4cDVWAUO90Xg=

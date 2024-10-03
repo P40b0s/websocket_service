@@ -42,8 +42,20 @@ pub trait Converter where Self: serde::Serialize, for <'de> Self : serde::Deseri
 ## Клиент
 Необходимо создать структуру и имплементировать для нее `Client`  
 ```rust
+static CLIENT_ID: Lazy<String> = Lazy::new(|| {
+    let ts = Timestamp::from_unix(NoContext, 1497624119, 1234);
+    let uuid = Uuid::new_v7(ts);
+    uuid.to_string()
+});
 pub struct Client1;
-impl Client<TransportMessage> for Client1{}
+impl Client<TransportMessage> for Client1
+{
+    fn get_id() -> &'static str 
+    {
+        &CLIENT_ID
+    }
+}
+ 
 ```
 и можно запускать своего клиента так 
 ```rust
