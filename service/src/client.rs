@@ -17,7 +17,7 @@ pub trait Client<T> where T: serde::Serialize + Send + Sync, for <'de> T : serde
 {
     fn get_id() -> &'static str;
     fn start_client<F>(addr: &str, f:F)  -> impl Future<Output = ()> + Send
-    where F:  Send + Sync + Copy + 'static + Fn(T)
+    where F:  Send + Sync + Clone + 'static + Fn(T)
     {
         let addr = addr.to_owned();
         let cli_id = Self::get_id();
@@ -27,7 +27,7 @@ pub trait Client<T> where T: serde::Serialize + Send + Sync, for <'de> T : serde
             {
                 loop
                 {
-                    start(cli_id, addr.clone(), f,0, 15).await;
+                    start(cli_id, addr.clone(), f.clone(),0, 15).await;
                 }
             });
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -105,7 +105,7 @@ pub trait Client<T> where T: serde::Serialize + Send + Sync, for <'de> T : serde
 }
 
 async fn start<F, T>(cli_id: &str, addr: String, f:F, attempts: u8, delay: u64) -> bool 
-where T: serde::Serialize + Send, for <'de> T : serde::Deserialize<'de> + Sized + Send, F:  Send + Copy + 'static + Fn(T)
+where T: serde::Serialize + Send, for <'de> T : serde::Deserialize<'de> + Sized + Send, F:  Send + Clone + 'static + Fn(T)
 {
     let (sender, local_receiver) = unbounded::<Message>();
     if let Some(s) = SENDER.get()
@@ -137,10 +137,11 @@ where T: serde::Serialize + Send, for <'de> T : serde::Deserialize<'de> + Sized 
     let (write, read) = ws_stream.split();
     //сообщения полученные по каналу local_receiver'ом форвардятся прямо в вебсокет
     let send_to_ws = local_receiver.map(Ok).forward(write);
+    let fun = f.clone();
     //для каждого входяшего сообщения по вебсокет производим обработку
     let from_ws = 
     {
-        read.for_each(|message| async 
+        read.for_each(|message| async
         {
             if let Ok(message) = message
             {
@@ -149,7 +150,8 @@ where T: serde::Serialize + Send, for <'de> T : serde::Deserialize<'de> + Sized 
                     let msg = serde_json::from_slice::<T>(&message.into_data()).with_context(|| format!("Данный объект отличается от того который вы хотите получить"));
                     if let Ok(m) = msg
                     {
-                        f(m)
+                        let fun = fun.clone();
+                        fun(m)
                     }
                     else 
                     {
